@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Command node, npm, bun, npx -ErrorAction SilentlyContinue)",
+      "PowerShell($env:PATH = $env:PATH + \";C:\\\\Program Files\\\\nodejs\"; cd \"c:\\\\Users\\\\mahno\\\\Desktop\\\\adalat-sahara-guide-main\"; & \"C:\\\\Program Files\\\\nodejs\\\\npx.cmd\" tsc --noEmit 2>&1 | Select-Object -First 40)",
+      "PowerShell($env:PATH = $env:PATH + \";C:\\\\Program Files\\\\nodejs\"; cd \"c:\\\\Users\\\\mahno\\\\Desktop\\\\adalat-sahara-guide-main\"; & \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" run dev 2>&1)"
+    ]
+  }
+}

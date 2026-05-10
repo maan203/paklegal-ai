@@ -1,0 +1,5 @@
+# Copy this file to .dev.vars for local development
+# Get a free Gemini API key at: https://aistudio.google.com/apikey
+# .dev.vars is gitignored
+
+GEMINI_API_KEY=your-gemini-api-key-here
