@@ -32,15 +32,27 @@ async function complete(messages: Message[]): Promise<{ text: string }> {
         throw new Error("The AI service rejected the API key. Check GROQ_API_KEY.");
       }
       if (err.status === 404) {
+        throw new Error(`AI model "${model}" is not available. Set GROQ_MODEL to a current model.`);
+      }
+      if (err.status === 413) {
         throw new Error(
-          `AI model "${model}" is not available. Set GROQ_MODEL to a current model.`,
+          "This request is too large for the free AI tier. Shorten the text or wait a minute and try again.",
         );
       }
       if (err.status === 429) {
         throw new Error("The AI service is rate-limited. Please try again in a minute.");
       }
+      if (err.status !== undefined && err.status >= 500) {
+        throw new Error(
+          `The AI service is down right now (error ${err.status}). Please try again later.`,
+        );
+      }
+      throw new Error(
+        `The AI service returned an error (${err.status ?? "network"}): ${err.message}`,
+      );
     }
-    throw new Error("The AI service is unavailable right now. Please try again.");
+    const detail = err instanceof Error ? ` (${err.message})` : "";
+    throw new Error(`The AI service is unavailable right now${detail}. Please try again.`);
   }
 }
 
