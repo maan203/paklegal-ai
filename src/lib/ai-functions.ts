@@ -1,8 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import OpenAI from "openai";
+import { extractText, getDocumentProxy } from "unpdf";
 
-// Groq free tier (OpenAI-compatible API). Override with GROQ_MODEL if needed.
+// Groq free tier (OpenAI-compatible API). Override with GROQ_MODEL / GROQ_VISION_MODEL if needed.
 const DEFAULT_MODEL = "openai/gpt-oss-120b";
+const DEFAULT_VISION_MODEL = "qwen/qwen3.8-27b";
+
+// Keeps a document well inside the free tier's 8,000 tokens-per-minute limit.
+const MAX_DOCUMENT_CHARS = 12000;
+// Groq rejects base64 images larger than 4 MB.
+const MAX_IMAGE_BASE64_CHARS = 4 * 1024 * 1024;
 
 function getAI() {
   const apiKey = process.env.GROQ_API_KEY;
@@ -17,11 +24,13 @@ function getAI() {
   });
 }
 
-type Message = { role: "system" | "user" | "assistant"; content: string };
+type Message = OpenAI.Chat.ChatCompletionMessageParam;
 
-async function complete(messages: Message[]): Promise<{ text: string }> {
+async function complete(
+  messages: Message[],
+  model = process.env.GROQ_MODEL || DEFAULT_MODEL,
+): Promise<{ text: string }> {
   const ai = getAI();
-  const model = process.env.GROQ_MODEL || DEFAULT_MODEL;
   try {
     const completion = await ai.chat.completions.create({ model, messages });
     return { text: completion.choices[0]?.message?.content ?? "" };
@@ -253,23 +262,61 @@ export const translateDocument = createServerFn({ method: "POST" })
       language === "en" ? "\n\nIMPORTANT: Output the analysis in ENGLISH ONLY. Do not include any Urdu sections." :
       language === "ur" ? "\n\nاہم: تجزیہ صرف اردو میں فراہم کریں۔ انگریزی حصے شامل نہ کریں۔" :
       "";
+    const instruction = "Analyze this legal document:" + langInstruction;
+    const system: Message = { role: "system", content: TRANSLATOR_SYSTEM_PROMPT };
 
-    let userContent = "Analyze this legal document:" + langInstruction;
-    if (fileBase64 && mediaType) {
-      if (mediaType === "application/pdf" || mediaType.startsWith("text/")) {
-        userContent += "\n\n" + Buffer.from(fileBase64, "base64").toString("utf-8").slice(0, 12000);
-      } else {
-        userContent += "\n\n[Image file uploaded — please describe what you see in this legal document]";
+    if (fileBase64 && mediaType?.startsWith("image/")) {
+      if (fileBase64.length > MAX_IMAGE_BASE64_CHARS) {
+        throw new Error("Image is too large. Please upload an image under 3 MB.");
       }
-    } else if (text) {
-      userContent += `\n\n${text}`;
+      return complete(
+        [
+          system,
+          {
+            role: "user",
+            content: [
+              { type: "text", text: instruction },
+              { type: "image_url", image_url: { url: `data:${mediaType};base64,${fileBase64}` } },
+            ],
+          },
+        ],
+        process.env.GROQ_VISION_MODEL || DEFAULT_VISION_MODEL,
+      );
+    }
+
+    let documentText = text ?? "";
+    if (fileBase64) {
+      const bytes = Buffer.from(fileBase64, "base64");
+      if (mediaType === "application/pdf") {
+        documentText = await extractPdfText(bytes);
+        if (!documentText.trim()) {
+          throw new Error(
+            "Could not read any text from this PDF (it may be a scanned image). Upload a photo or screenshot of the page instead, or paste the text.",
+          );
+        }
+      } else if (mediaType?.startsWith("text/")) {
+        documentText = bytes.toString("utf-8");
+      } else {
+        throw new Error("Unsupported file type. Please upload a PDF or an image.");
+      }
     }
 
     return complete([
-      { role: "system", content: TRANSLATOR_SYSTEM_PROMPT },
-      { role: "user", content: userContent },
+      system,
+      { role: "user", content: `${instruction}\n\n${documentText.slice(0, MAX_DOCUMENT_CHARS)}` },
     ]);
   });
+
+async function extractPdfText(bytes: Uint8Array): Promise<string> {
+  try {
+    const pdf = await getDocumentProxy(new Uint8Array(bytes));
+    const { text } = await extractText(pdf, { mergePages: true });
+    return text;
+  } catch (err) {
+    console.error("PDF extraction error:", err);
+    throw new Error("Could not open this PDF. It may be corrupted or password-protected.");
+  }
+}
 
 export const generateLegalNotice = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => {
