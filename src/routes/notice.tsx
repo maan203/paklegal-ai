@@ -11,14 +11,10 @@ import {
   Receipt,
   ArrowRight,
   ArrowLeft,
-  Printer,
-  RotateCcw,
   Loader2,
-  Copy,
-  Check,
 } from "lucide-react";
 import { generateLegalNotice } from "@/lib/ai-functions";
-import { MarkdownResult } from "@/components/MarkdownResult";
+import { DocumentResult } from "@/components/DocumentResult";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { toast } from "sonner";
 
@@ -133,13 +129,12 @@ function Page() {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useLocalStorage<string | null>("notice-result", null);
-  const [copied, setCopied] = useState(false);
 
   const handleTypeSelect = useCallback((id: NoticeTypeId) => {
     setSelectedType(id);
     setFormData({});
     setResult(null);
-  }, []);
+  }, [setResult]);
 
   const handleFieldChange = useCallback((key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -171,33 +166,13 @@ function Page() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedType, formData, t]);
-
-  const handleCopy = useCallback(() => {
-    if (!result) return;
-    navigator.clipboard.writeText(result);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [result]);
-
-  const handlePrint = useCallback(() => {
-    if (!result) return;
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(
-      `<!DOCTYPE html><html><head><title>Legal Notice — PakLegal AI</title>` +
-        `<style>body{font-family:serif;padding:2cm;line-height:1.7;}pre{white-space:pre-wrap;font-family:serif;font-size:13px;}</style>` +
-        `</head><body><pre>${result.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre></body></html>`
-    );
-    w.document.close();
-    w.print();
-  }, [result]);
+  }, [selectedType, formData, t, setResult]);
 
   const handleReset = useCallback(() => {
     setSelectedType(null);
     setFormData({});
     setResult(null);
-  }, []);
+  }, [setResult]);
 
   const selectedMeta = selectedType ? TYPES.find((x) => x.id === selectedType) : null;
 
@@ -214,34 +189,17 @@ function Page() {
       <div className="mx-auto max-w-5xl px-4 sm:px-6 pb-16">
         {/* Step 3: Result */}
         {result && (
-          <div>
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-              <h2 className={`font-display text-xl font-semibold ${lang === "ur" ? "urdu" : ""}`}>
-                {t("Your Legal Notice", "آپ کا قانونی نوٹس")}
-              </h2>
-              <div className="flex gap-2">
-                <button onClick={handleCopy} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                  {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-                  {copied ? t("Copied!", "کاپی ہو گیا!") : t("Copy", "کاپی کریں")}
-                </button>
-                <button onClick={handlePrint} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                  <Printer className="h-4 w-4" />{t("Print", "پرنٹ")}
-                </button>
-                <button onClick={handleReset} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                  <RotateCcw className="h-4 w-4" />{t("New Notice", "نیا نوٹس")}
-                </button>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-border bg-card p-6 shadow-[var(--shadow-soft)]">
-              <MarkdownResult text={result} />
-            </div>
-            <p className="mt-4 text-xs text-muted-foreground">
-              {t(
-                "⚠️ This is an AI-generated notice. Have it reviewed by a lawyer before dispatch.",
-                "⚠️ یہ اے آئی سے تیار کردہ نوٹس ہے۔ بھیجنے سے پہلے کسی وکیل سے تصدیق کروائیں۔"
-              )}
-            </p>
-          </div>
+          <DocumentResult
+            text={result}
+            heading={t("Your Legal Notice", "آپ کا قانونی نوٹس")}
+            printTitle="Legal Notice"
+            resetLabel={t("New Notice", "نیا نوٹس")}
+            onReset={handleReset}
+            disclaimer={t(
+              "This is an AI-generated notice. Have it reviewed by a lawyer before dispatch.",
+              "یہ اے آئی سے تیار کردہ نوٹس ہے۔ بھیجنے سے پہلے کسی وکیل سے تصدیق کروائیں۔"
+            )}
+          />
         )}
 
         {/* Step 1: Choose type */}

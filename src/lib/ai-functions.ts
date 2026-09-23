@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import OpenAI from "openai";
 import { extractText, getDocumentProxy } from "unpdf";
+import { z } from "zod";
 
 // Groq free tier (OpenAI-compatible API). Override with GROQ_MODEL / GROQ_VISION_MODEL if needed.
 const DEFAULT_MODEL = "openai/gpt-oss-120b";
@@ -10,6 +11,47 @@ const DEFAULT_VISION_MODEL = "qwen/qwen3.8-27b";
 const MAX_DOCUMENT_CHARS = 12000;
 // Groq rejects base64 images larger than 4 MB.
 const MAX_IMAGE_BASE64_CHARS = 4 * 1024 * 1024;
+// The UI allows 10 MB files; base64 adds ~33%.
+const MAX_FILE_BASE64_CHARS = 14 * 1024 * 1024;
+// Older chat turns are dropped beyond this so long conversations stay under the rate limit.
+const MAX_CHAT_HISTORY_CHARS = 12000;
+
+// ── Input validation ─────────────────────────────────────────────────────────
+
+const SHORT_FIELD = 300;
+const LONG_FIELD = 5000;
+
+const field = (max: number, missingMessage = "Please fill in all required fields.") =>
+  z
+    .string({ required_error: missingMessage, invalid_type_error: "Invalid input." })
+    .trim()
+    .max(max, `One of the fields is too long (maximum ${max} characters).`);
+const required = (max: number, message: string) => field(max, message).min(1, message);
+const optional = (max: number) => field(max).optional();
+const outputLanguage = z.enum(["en", "ur"], {
+  errorMap: () => ({ message: "Please select a language." }),
+});
+
+function validate<T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer<T> {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    throw new Error(result.error.issues[0]?.message ?? "Invalid input.");
+  }
+  return result.data;
+}
+
+function formatDetails(fields: Record<string, string | undefined>): string {
+  return Object.entries(fields)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `- ${k}: ${v}`)
+    .join("\n");
+}
+
+function todayInPakistan(): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Karachi", dateStyle: "long" }).format(
+    new Date(),
+  );
+}
 
 function getAI() {
   const apiKey = process.env.GROQ_API_KEY;
@@ -29,10 +71,11 @@ type Message = OpenAI.Chat.ChatCompletionMessageParam;
 async function complete(
   messages: Message[],
   model = process.env.GROQ_MODEL || DEFAULT_MODEL,
+  maxTokens?: number,
 ): Promise<{ text: string }> {
   const ai = getAI();
   try {
-    const completion = await ai.chat.completions.create({ model, messages });
+    const completion = await ai.chat.completions.create({ model, messages, max_tokens: maxTokens });
     return { text: completion.choices[0]?.message?.content ?? "" };
   } catch (err) {
     console.error("Groq API error:", err);
@@ -43,7 +86,9 @@ async function complete(
       if (err.status === 404) {
         throw new Error(`AI model "${model}" is not available. Set GROQ_MODEL to a current model.`);
       }
-      if (err.status === 413) {
+      // Groq reports "too large for your per-minute limit" as 413 or as 429 with this message;
+      // retrying the same request can never succeed.
+      if (err.status === 413 || (err.status === 429 && /request too large/i.test(err.message))) {
         throw new Error(
           "This request is too large for the free AI tier. Shorten the text or wait a minute and try again.",
         );
@@ -65,15 +110,20 @@ async function complete(
   }
 }
 
+// Legal documents must not contain made-up facts, figures or citations.
+const FACTS_RULE = `Accuracy rules:
+- Use ONLY the facts the user provided. Do not add events, dates, amounts, fees, deadlines or documents that were not given.
+- Never invent names, addresses, phone numbers, CNICs, case numbers or reference numbers — write a clear [placeholder] instead.
+- Cite only Pakistani laws and sections you are certain exist. If unsure of an exact section number, name the law without a section.`;
+
 const FIR_SYSTEM_PROMPT = `You are a senior Pakistani criminal lawyer with expertise in the Code of Criminal Procedure (CrPC) 1898 and Pakistan Penal Code (PPC) 1860.
 
-Generate a properly formatted FIR (First Information Report) following Form 154 of the CrPC. Output TWO complete versions.
+Generate a properly formatted FIR (First Information Report) following Form 154 of the CrPC, in the language the user requests, using this structure:
 
-ENGLISH FIR:
 ---
 FIRST INFORMATION REPORT (FIR)
 Police Station: [Name of Police Station], [City]
-FIR No: ______/2026        Date: [Today's Date]        Time: [Time of Filing]
+FIR No: ______/[Current Year]        Date: [Today's Date]        Time: [Time of Filing]
 
 1. COMPLAINANT INFORMATION
 Name: [Complainant Name]
@@ -108,10 +158,9 @@ I, the undersigned complainant, hereby declare that the above information is tru
 Complainant Signature: _____________    Date: _____________
 ---
 
-URDU FIR (اردو ایف آئی آر):
----
-[Complete FIR in formal Urdu following the exact same structure above]
----
+When Urdu is requested, write the complete FIR in formal Urdu following the exact same structure.
+
+${FACTS_RULE}
 
 Be precise about PPC sections. Common sections: theft (379-382), robbery (392-395), cheating/fraud (420), murder (302), grievous hurt (337), extortion (383-387), criminal breach of trust (405-409), kidnapping (365-369), sexual assault (376), trespass (441-447), cybercrime (PECA 2016). Match sections to what occurred.`;
 
@@ -161,7 +210,7 @@ Generate a professionally formatted legal notice following Pakistani legal conve
 - Have a proper LEGAL NOTICE header with date
 - Name the sending and receiving parties clearly
 - Present background facts chronologically
-- Cite correct Pakistani laws (Contract Act 1872, Rent Restriction Ordinances, EOBI Act, PPC 1860, CrPC 1898, Sale of Goods Act, Consumer Protection Act, etc.)
+- Cite only Pakistani law (never Indian statutes) — e.g. Contract Act 1872, Rent Restriction Ordinances, EOBI Act, PPC 1860, CrPC 1898, Sale of Goods Act, Consumer Protection Act, etc.
 - State a specific demand with a clear deadline (14 days urgent, 30 days standard)
 - State consequences of non-compliance
 - End with a professional advocate signature block
@@ -176,7 +225,9 @@ ENGLISH NOTICE:
 URDU NOTICE (اردو نوٹس):
 ---
 [Complete formal legal notice in formal Urdu]
----`;
+---
+
+${FACTS_RULE}`;
 
 function buildNoticePrompt(data: Record<string, string>): string {
   const { noticeType, ...fields } = data;
@@ -211,15 +262,24 @@ export type FIRInput = {
   witness2?: string;
 };
 
+const FIR_DETAIL_MESSAGE = "Please provide more detail about the incident (at least 20 characters).";
+
+const firSchema = z.object({
+  description: field(LONG_FIELD, FIR_DETAIL_MESSAGE).min(20, FIR_DETAIL_MESSAGE),
+  language: outputLanguage,
+  name: optional(SHORT_FIELD),
+  cnic: optional(SHORT_FIELD),
+  address: optional(SHORT_FIELD),
+  phone: optional(SHORT_FIELD),
+  incidentDate: optional(SHORT_FIELD),
+  incidentTime: optional(SHORT_FIELD),
+  place: optional(SHORT_FIELD),
+  witness1: optional(SHORT_FIELD),
+  witness2: optional(SHORT_FIELD),
+});
+
 export const generateFIRDraft = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => {
-    const d = data as FIRInput;
-    if (!d?.description?.trim() || d.description.trim().length < 20) {
-      throw new Error("Please provide more detail about the incident (at least 20 characters).");
-    }
-    if (!d.language) throw new Error("Please select a language.");
-    return d;
-  })
+  .inputValidator((data: unknown): FIRInput => validate(firSchema, data))
   .handler(async (ctx) => {
     const { description, language, name, cnic, address, phone, incidentDate, incidentTime, place, witness1, witness2 } = ctx.data;
 
@@ -239,7 +299,7 @@ export const generateFIRDraft = createServerFn({ method: "POST" })
       witness2 && `Witness 2: ${witness2}`,
     ].filter(Boolean).join("\n");
 
-    const userPrompt = `${langInstruction}\n\nIncident Description:\n${description}${knownFields ? `\n\nAdditional Details Provided:\n${knownFields}` : ""}`;
+    const userPrompt = `${langInstruction}\nToday's date: ${todayInPakistan()}\n\nIncident Description:\n${description}${knownFields ? `\n\nAdditional Details Provided:\n${knownFields}` : ""}`;
 
     return complete([
       { role: "system", content: FIR_SYSTEM_PROMPT },
@@ -248,13 +308,22 @@ export const generateFIRDraft = createServerFn({ method: "POST" })
   });
 
 export const translateDocument = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => {
-    const d = data as { text?: string; fileBase64?: string; mediaType?: string; language?: "en" | "ur" | "both" };
-    if (!d?.text?.trim() && !d?.fileBase64) {
-      throw new Error("Please paste document text or upload a file.");
-    }
-    return d;
-  })
+  .inputValidator((data: unknown) =>
+    validate(
+      z
+        .object({
+          text: optional(50000),
+          fileBase64: z
+            .string()
+            .max(MAX_FILE_BASE64_CHARS, "File is too large. Maximum size is 10 MB.")
+            .optional(),
+          mediaType: optional(100),
+          language: z.enum(["en", "ur", "both"]).default("both"),
+        })
+        .refine((d) => d.text || d.fileBase64, "Please paste document text or upload a file."),
+      data,
+    ),
+  )
   .handler(async (ctx) => {
     const { text, fileBase64, mediaType, language = "both" } = ctx.data;
 
@@ -262,30 +331,13 @@ export const translateDocument = createServerFn({ method: "POST" })
       language === "en" ? "\n\nIMPORTANT: Output the analysis in ENGLISH ONLY. Do not include any Urdu sections." :
       language === "ur" ? "\n\nاہم: تجزیہ صرف اردو میں فراہم کریں۔ انگریزی حصے شامل نہ کریں۔" :
       "";
-    const instruction = "Analyze this legal document:" + langInstruction;
+    const instruction = `Today's date: ${todayInPakistan()}\n\nAnalyze this legal document:${langInstruction}`;
     const system: Message = { role: "system", content: TRANSLATOR_SYSTEM_PROMPT };
 
-    if (fileBase64 && mediaType?.startsWith("image/")) {
-      if (fileBase64.length > MAX_IMAGE_BASE64_CHARS) {
-        throw new Error("Image is too large. Please upload an image under 3 MB.");
-      }
-      return complete(
-        [
-          system,
-          {
-            role: "user",
-            content: [
-              { type: "text", text: instruction },
-              { type: "image_url", image_url: { url: `data:${mediaType};base64,${fileBase64}` } },
-            ],
-          },
-        ],
-        process.env.GROQ_VISION_MODEL || DEFAULT_VISION_MODEL,
-      );
-    }
-
     let documentText = text ?? "";
-    if (fileBase64) {
+    if (fileBase64 && mediaType?.startsWith("image/")) {
+      documentText = await transcribeImage(fileBase64, mediaType);
+    } else if (fileBase64) {
       const bytes = Buffer.from(fileBase64, "base64");
       if (mediaType === "application/pdf") {
         documentText = await extractPdfText(bytes);
@@ -307,6 +359,36 @@ export const translateDocument = createServerFn({ method: "POST" })
     ]);
   });
 
+// The free vision model allows only ~1,000 output tokens per minute, too few for a full
+// analysis, so it only transcribes the text; the main model then analyses it like a PDF.
+const TRANSCRIPTION_MAX_TOKENS = 900;
+
+async function transcribeImage(base64: string, mediaType: string): Promise<string> {
+  if (base64.length > MAX_IMAGE_BASE64_CHARS) {
+    throw new Error("Image is too large. Please upload an image under 3 MB.");
+  }
+  const { text } = await complete(
+    [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Transcribe all text in this document image exactly, in its original language (English or Urdu), preserving line breaks. Output only the transcription. If there is no readable text, output nothing.",
+          },
+          { type: "image_url", image_url: { url: `data:${mediaType};base64,${base64}` } },
+        ],
+      },
+    ],
+    process.env.GROQ_VISION_MODEL || DEFAULT_VISION_MODEL,
+    TRANSCRIPTION_MAX_TOKENS,
+  );
+  if (!text.trim()) {
+    throw new Error("Could not read any text in this image. Please upload a clearer photo.");
+  }
+  return text;
+}
+
 async function extractPdfText(bytes: Uint8Array): Promise<string> {
   try {
     const pdf = await getDocumentProxy(new Uint8Array(bytes));
@@ -318,16 +400,28 @@ async function extractPdfText(bytes: Uint8Array): Promise<string> {
   }
 }
 
-export const generateLegalNotice = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => {
-    const d = data as NoticeInput;
-    if (!d?.noticeType) throw new Error("Please select a notice type.");
-    return d;
+const noticeSchema = z
+  .object({
+    noticeType: z.enum(["landlord", "employment", "consumer", "property", "cheque"], {
+      errorMap: () => ({ message: "Please select a notice type." }),
+    }),
   })
+  .catchall(field(LONG_FIELD))
+  .refine((d) => Object.keys(d).length <= 20, "Too many fields.")
+  .refine(
+    (d) => Object.keys(d).every((k) => /^[A-Za-z]{1,40}$/.test(k)),
+    "Invalid field name.",
+  );
+
+export const generateLegalNotice = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown): NoticeInput => validate(noticeSchema, data))
   .handler(async (ctx) => {
     return complete([
       { role: "system", content: NOTICE_SYSTEM_PROMPT },
-      { role: "user", content: buildNoticePrompt(ctx.data) },
+      {
+        role: "user",
+        content: `Today's date: ${todayInPakistan()}\n\n${buildNoticePrompt(ctx.data)}`,
+      },
     ]);
   });
 
@@ -343,17 +437,51 @@ Rules:
 - Always remind users to consult a qualified lawyer for their specific situation.
 - Provide both English and Urdu explanations when the user writes in Urdu or asks for Urdu.
 - Cite the relevant law/section when applicable (e.g. "Section 302 PPC", "Article 10 Constitution").
+- Cite ONLY Pakistani law. Never cite Indian statutes or section numbers (e.g. the Indian Penal Code, BNS, or Section 138 of India's Negotiable Instruments Act). In Pakistan a dishonoured (bounced) cheque is an offence under Section 489-F PPC.
 - If a question is outside Pakistani law, politely say so.
 - Keep answers concise but complete — use bullet points for steps or lists.`;
 
+const chatSchema = z.object({
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"], {
+          errorMap: () => ({ message: "Invalid message role." }),
+        }),
+        content: required(20000, "Message cannot be empty."),
+      }),
+      { required_error: "No message provided.", invalid_type_error: "Invalid input." },
+    )
+    .min(1, "No message provided.")
+    .max(100, "This conversation is too long. Please clear the chat and start again.")
+    .refine((m) => m[m.length - 1].role === "user", "The last message must be a question.")
+    .refine(
+      (m) => m[m.length - 1].content.length <= 4000,
+      "Your question is too long (maximum 4000 characters).",
+    ),
+});
+
+// Keep the newest messages that fit the budget, always including the latest question.
+function recentHistory(messages: ChatMessage[]): ChatMessage[] {
+  const kept: ChatMessage[] = [];
+  let total = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    total += messages[i].content.length;
+    if (kept.length > 0 && total > MAX_CHAT_HISTORY_CHARS) break;
+    kept.unshift(messages[i]);
+  }
+  // The model expects the conversation to start with a user turn.
+  while (kept.length > 1 && kept[0].role !== "user") kept.shift();
+  return kept;
+}
+
 export const askLegalQuestion = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => {
-    const d = data as { messages: ChatMessage[] };
-    if (!d?.messages?.length) throw new Error("No message provided.");
-    return d;
-  })
+  .inputValidator((data: unknown): { messages: ChatMessage[] } => validate(chatSchema, data))
   .handler(async (ctx) => {
-    return complete([{ role: "system", content: CHAT_SYSTEM_PROMPT }, ...ctx.data.messages]);
+    return complete([
+      { role: "system", content: `${CHAT_SYSTEM_PROMPT}\n\nToday's date: ${todayInPakistan()}` },
+      ...recentHistory(ctx.data.messages),
+    ]);
   });
 
 // ── Bail Application ─────────────────────────────────────────────────────────
@@ -369,7 +497,9 @@ The application must include:
 - Prayer / relief sought
 - Advocate signature block
 
-Output in the requested language only. Use formal legal language.`;
+Output in the requested language only. Use formal legal language. Cite only Pakistani law — never Indian statutes.
+
+${FACTS_RULE}`;
 
 export type BailInput = {
   accusedName: string;
@@ -385,27 +515,33 @@ export type BailInput = {
   language: "en" | "ur";
 };
 
+const bailSchema = z.object({
+  accusedName: required(SHORT_FIELD, "Please provide the accused's name."),
+  accusedAddress: required(SHORT_FIELD, "Please provide the accused's address."),
+  accusedCnic: optional(SHORT_FIELD),
+  firNumber: optional(SHORT_FIELD),
+  policeStation: optional(SHORT_FIELD),
+  sections: optional(SHORT_FIELD),
+  arrestDate: optional(SHORT_FIELD),
+  court: required(SHORT_FIELD, "Please specify the court."),
+  grounds: required(LONG_FIELD, "Please provide grounds for bail."),
+  advocateName: optional(SHORT_FIELD),
+  language: outputLanguage,
+});
+
 export const generateBailApplication = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => {
-    const d = data as BailInput;
-    if (!d?.accusedName?.trim()) throw new Error("Please provide the accused's name.");
-    if (!d?.court?.trim()) throw new Error("Please specify the court.");
-    if (!d?.grounds?.trim()) throw new Error("Please provide grounds for bail.");
-    if (!d?.language) throw new Error("Please select a language.");
-    return d;
-  })
+  .inputValidator((data: unknown): BailInput => validate(bailSchema, data))
   .handler(async (ctx) => {
     const { language, ...fields } = ctx.data;
     const langInstruction = language === "ur"
       ? "Generate the bail application in URDU ONLY."
       : "Generate the bail application in ENGLISH ONLY.";
-    const details = Object.entries(fields)
-      .filter(([, v]) => v?.trim())
-      .map(([k, v]) => `- ${k}: ${v}`)
-      .join("\n");
     return complete([
       { role: "system", content: BAIL_SYSTEM_PROMPT },
-      { role: "user", content: `${langInstruction}\n\nDetails:\n${details}` },
+      {
+        role: "user",
+        content: `${langInstruction}\nToday's date: ${todayInPakistan()}\n\nDetails:\n${formatDetails(fields)}`,
+      },
     ]);
   });
 
@@ -430,9 +566,12 @@ Identify the correct authority based on the complaint type:
 - Banking/Finance: SBP Banking Mohtasib or SECP
 - Insurance: SECP Insurance Division
 - General Consumer: Provincial Consumer Protection Courts
-- Online Fraud/Cybercrime: FIA Cybercrime Wing
+- Online Fraud/Cybercrime: FIA Cybercrime Wing (now NCCIA — National Cyber Crime Investigation Agency)
+- Government Departments (NADRA, passport, etc.): Wafaqi Mohtasib (Federal Ombudsman), the relevant Provincial Ombudsman, or the Pakistan Citizen's Portal
 
-Output in the requested language only.`;
+Output in the requested language only. Cite only Pakistani law — never Indian statutes.
+
+${FACTS_RULE}`;
 
 export type ComplaintInput = {
   complaintType: string;
@@ -448,25 +587,35 @@ export type ComplaintInput = {
   language: "en" | "ur";
 };
 
+const complaintSchema = z.object({
+  complaintType: z.enum(
+    ["electricity", "telecom", "banking", "consumer", "cybercrime", "government", "other"],
+    { errorMap: () => ({ message: "Please select a complaint type." }) },
+  ),
+  complainantName: required(SHORT_FIELD, "Please provide your name."),
+  complainantCnic: optional(SHORT_FIELD),
+  complainantAddress: required(SHORT_FIELD, "Please provide your address."),
+  complainantPhone: required(SHORT_FIELD, "Please provide your phone number."),
+  respondentName: required(SHORT_FIELD, "Please provide the company or department name."),
+  incidentDate: required(SHORT_FIELD, "Please provide the incident date."),
+  description: required(LONG_FIELD, "Please describe the complaint."),
+  amountInvolved: optional(SHORT_FIELD),
+  reliefSought: required(SHORT_FIELD, "Please describe the relief you want."),
+  language: outputLanguage,
+});
+
 export const generateConsumerComplaint = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => {
-    const d = data as ComplaintInput;
-    if (!d?.complainantName?.trim()) throw new Error("Please provide your name.");
-    if (!d?.description?.trim()) throw new Error("Please describe the complaint.");
-    if (!d?.language) throw new Error("Please select a language.");
-    return d;
-  })
+  .inputValidator((data: unknown): ComplaintInput => validate(complaintSchema, data))
   .handler(async (ctx) => {
     const { language, ...fields } = ctx.data;
     const langInstruction = language === "ur"
       ? "Generate the complaint letter in URDU ONLY."
       : "Generate the complaint letter in ENGLISH ONLY.";
-    const details = Object.entries(fields)
-      .filter(([, v]) => v?.trim())
-      .map(([k, v]) => `- ${k}: ${v}`)
-      .join("\n");
     return complete([
       { role: "system", content: COMPLAINT_SYSTEM_PROMPT },
-      { role: "user", content: `${langInstruction}\n\nComplaint Details:\n${details}` },
+      {
+        role: "user",
+        content: `${langInstruction}\nToday's date: ${todayInPakistan()}\n\nComplaint Details:\n${formatDetails(fields)}`,
+      },
     ]);
   });

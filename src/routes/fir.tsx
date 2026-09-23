@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Mic, FileText, Printer, RotateCcw, Loader2, ChevronRight, ChevronLeft, Copy, Check } from "lucide-react";
+import { Mic, FileText, Loader2, ChevronRight, ChevronLeft } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { PageHeader } from "@/components/PageHeader";
 import { useLang } from "@/lib/i18n";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { generateFIRDraft, type FIRInput } from "@/lib/ai-functions";
-import { MarkdownResult } from "@/components/MarkdownResult";
+import { DocumentResult } from "@/components/DocumentResult";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { toast } from "sonner";
 
@@ -37,40 +37,62 @@ function Page() {
   const [language, setLanguage] = useState<"en" | "ur" | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useLocalStorage<string | null>("fir-result", null);
-  const [copied, setCopied] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
 
   const setField = (key: keyof FIRInput, value: string) =>
     setDetails((prev) => ({ ...prev, [key]: value }));
 
+  // Stop the microphone if the user leaves the page mid-recording.
+  useEffect(() => () => recognitionRef.current?.abort(), []);
+
   const handleVoiceInput = useCallback(() => {
-    if (typeof window === "undefined") return;
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      return;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SR) {
-      toast.error(t("Voice input not supported in this browser.", "اس براؤزر میں آواز سے اندراج ممکن نہیں۔"));
+      toast.error(t("Voice input not supported in this browser. Try Chrome.", "اس براؤزر میں آواز سے اندراج ممکن نہیں۔ کروم استعمال کریں۔"));
       return;
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const recognition: any = new SR();
+    const recognition = new SR();
     recognition.lang = lang === "ur" ? "ur-PK" : "en-US";
     recognition.continuous = true;
     recognition.interimResults = false;
     recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      setIsListening(false);
+    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const transcript = Array.from(event.results as any[]).map((r: any) => r[0].transcript).join(" ");
-      setDescription((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      // Only take results added by this event; earlier ones were already appended.
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) transcript += event.results[i][0].transcript;
+      }
+      transcript = transcript.trim();
+      if (transcript) setDescription((prev) => (prev ? `${prev} ${transcript}` : transcript));
     };
-    recognition.onerror = () => {
-      setIsListening(false);
-      toast.error(t("Voice recognition error. Try again.", "آواز پہچاننے میں خرابی۔"));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onerror = (event: any) => {
+      if (event.error === "aborted" || event.error === "no-speech") return;
+      toast.error(
+        event.error === "not-allowed"
+          ? t("Microphone access was blocked. Allow it in your browser settings.", "مائیکروفون کی اجازت نہیں ملی۔ براؤزر کی ترتیبات میں اجازت دیں۔")
+          : t("Voice recognition error. Try again.", "آواز پہچاننے میں خرابی۔"),
+      );
     };
-    if (isListening) recognition.stop();
-    else recognition.start();
-  }, [lang, isListening, t]);
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+    }
+  }, [lang, t]);
 
   const handleGenerate = useCallback(async (selectedLang: "en" | "ur") => {
     setIsLoading(true);
@@ -90,27 +112,7 @@ function Page() {
     } finally {
       setIsLoading(false);
     }
-  }, [description, details, t]);
-
-  const handleCopy = useCallback(() => {
-    if (!result) return;
-    navigator.clipboard.writeText(result);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [result]);
-
-  const handlePrint = useCallback(() => {
-    if (!result) return;
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(
-      `<!DOCTYPE html><html><head><title>FIR Draft — PakLegal AI</title>` +
-        `<style>body{font-family:serif;padding:2cm;line-height:1.7;}pre{white-space:pre-wrap;font-family:serif;font-size:13px;}</style>` +
-        `</head><body><pre>${result.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre></body></html>`
-    );
-    w.document.close();
-    w.print();
-  }, [result]);
+  }, [description, details, t, setResult]);
 
   const handleReset = useCallback(() => {
     setResult(null);
@@ -118,7 +120,7 @@ function Page() {
     setDetails({});
     setLanguage(null);
     setStep("describe");
-  }, []);
+  }, [setResult]);
 
   if (result) {
     return (
@@ -131,29 +133,14 @@ function Page() {
           descUr="ہمیں بتائیں کیا ہوا۔ ہم درست فارمیٹ میں ایف آئی آر تیار کریں گے۔"
         />
         <div className="mx-auto max-w-3xl px-4 sm:px-6 pb-16">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-            <h2 className={`font-display text-xl font-semibold ${lang === "ur" ? "urdu" : ""}`}>
-              {t("Your FIR Draft", "آپ کا ایف آئی آر مسودہ")}
-            </h2>
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={handleCopy} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-                {copied ? t("Copied!", "کاپی ہو گیا!") : t("Copy", "کاپی کریں")}
-              </button>
-              <button onClick={handlePrint} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                <Printer className="h-4 w-4" />{t("Print", "پرنٹ")}
-              </button>
-              <button onClick={handleReset} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                <RotateCcw className="h-4 w-4" />{t("New FIR", "نئی ایف آئی آر")}
-              </button>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-[var(--shadow-soft)]">
-            <MarkdownResult text={result} />
-          </div>
-          <p className="mt-4 text-xs text-muted-foreground">
-            {t("⚠️ This is an AI-generated draft. Review carefully before submitting to police.", "⚠️ یہ اے آئی سے تیار کردہ مسودہ ہے۔ پولیس میں جمع کرانے سے پہلے احتیاط سے جانچیں۔")}
-          </p>
+          <DocumentResult
+            text={result}
+            heading={t("Your FIR Draft", "آپ کا ایف آئی آر مسودہ")}
+            printTitle="FIR Draft"
+            resetLabel={t("New FIR", "نئی ایف آئی آر")}
+            onReset={handleReset}
+            disclaimer={t("This is an AI-generated draft. Review carefully before submitting to police.", "یہ اے آئی سے تیار کردہ مسودہ ہے۔ پولیس میں جمع کرانے سے پہلے احتیاط سے جانچیں۔")}
+          />
         </div>
       </PageShell>
     );
@@ -183,7 +170,7 @@ function Page() {
               <span className={`text-xs hidden sm:inline ${step === s ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                 {t(["Describe", "Your Details", "Language"][i], ["واقعہ بیان کریں", "آپ کی معلومات", "زبان"][i])}
               </span>
-              {i < 2 && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              {i < 2 && <ChevronRight className="rtl:rotate-180 h-4 w-4 text-muted-foreground" />}
             </div>
           ))}
         </div>
@@ -221,7 +208,7 @@ function Page() {
                 className="inline-flex items-center gap-2 rounded-md bg-[image:var(--gradient-primary)] px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-soft)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 {t("Next: Your Details", "اگلا: آپ کی معلومات")}
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="rtl:rotate-180 h-4 w-4" />
               </button>
             </div>
           </div>
@@ -251,7 +238,7 @@ function Page() {
             </div>
             <div className="mt-6 flex justify-between">
               <button onClick={() => setStep("describe")} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition">
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="rtl:rotate-180 h-4 w-4" />
                 {t("Back", "واپس")}
               </button>
               <button
@@ -259,7 +246,7 @@ function Page() {
                 className="inline-flex items-center gap-2 rounded-md bg-[image:var(--gradient-primary)] px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-soft)] hover:opacity-90 transition"
               >
                 {t("Next: Choose Language", "اگلا: زبان منتخب کریں")}
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="rtl:rotate-180 h-4 w-4" />
               </button>
             </div>
           </div>
@@ -297,7 +284,7 @@ function Page() {
             </div>
             <div className="mt-6">
               <button onClick={() => setStep("details")} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition">
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="rtl:rotate-180 h-4 w-4" />
                 {t("Back", "واپس")}
               </button>
             </div>

@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronRight, ChevronLeft, Printer, RotateCcw, Loader2, Copy, Check, Zap, Wifi, Landmark, ShieldAlert, CreditCard, ShoppingCart, Globe } from "lucide-react";
+import { ChevronRight, ChevronLeft, Loader2, Zap, Wifi, Landmark, ShieldAlert, CreditCard, ShoppingCart, Globe } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { PageHeader } from "@/components/PageHeader";
 import { useLang } from "@/lib/i18n";
 import { useState, useCallback } from "react";
 import { generateConsumerComplaint, type ComplaintInput } from "@/lib/ai-functions";
-import { MarkdownResult } from "@/components/MarkdownResult";
+import { DocumentResult } from "@/components/DocumentResult";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { toast } from "sonner";
 
@@ -17,13 +17,13 @@ export const Route = createFileRoute("/complaint")({
 type Step = "type" | "details" | "language";
 
 const TYPES = [
-  { id: "electricity", icon: Zap,         en: "Electricity / WAPDA",     ur: "بجلی / واپڈا",        desc: "Overbilling, power cuts, meter issues" },
-  { id: "telecom",     icon: Wifi,         en: "Telecom / Internet",      ur: "ٹیلی کام / انٹرنیٹ",  desc: "Network, billing, service fraud" },
-  { id: "banking",     icon: CreditCard,   en: "Bank / Finance",          ur: "بینک / مالیات",        desc: "Fraud, unauthorized charges, disputes" },
-  { id: "consumer",    icon: ShoppingCart, en: "Product / Service",       ur: "مصنوعہ / خدمت",        desc: "Defective goods, refund, warranty" },
-  { id: "cybercrime",  icon: Globe,        en: "Online Fraud / Cybercrime", ur: "آن لائن فراڈ",       desc: "Scam, hacking, fake account" },
-  { id: "government",  icon: Landmark,     en: "Government Department",   ur: "سرکاری محکمہ",         desc: "NADRA, passport, utility agency" },
-  { id: "other",       icon: ShieldAlert,  en: "Other",                   ur: "دیگر",                 desc: "Any other consumer complaint" },
+  { id: "electricity", icon: Zap,         en: "Electricity / WAPDA",     ur: "بجلی / واپڈا",        desc: "Overbilling, power cuts, meter issues", descUr: "زیادہ بل، لوڈ شیڈنگ، میٹر کے مسائل" },
+  { id: "telecom",     icon: Wifi,         en: "Telecom / Internet",      ur: "ٹیلی کام / انٹرنیٹ",  desc: "Network, billing, service fraud", descUr: "نیٹ ورک، بلنگ، سروس فراڈ" },
+  { id: "banking",     icon: CreditCard,   en: "Bank / Finance",          ur: "بینک / مالیات",        desc: "Fraud, unauthorized charges, disputes", descUr: "فراڈ، غیر مجاز کٹوتیاں، تنازعات" },
+  { id: "consumer",    icon: ShoppingCart, en: "Product / Service",       ur: "مصنوعہ / خدمت",        desc: "Defective goods, refund, warranty", descUr: "خراب اشیاء، رقم کی واپسی، وارنٹی" },
+  { id: "cybercrime",  icon: Globe,        en: "Online Fraud / Cybercrime", ur: "آن لائن فراڈ",       desc: "Scam, hacking, fake account", descUr: "دھوکہ دہی، ہیکنگ، جعلی اکاؤنٹ" },
+  { id: "government",  icon: Landmark,     en: "Government Department",   ur: "سرکاری محکمہ",         desc: "NADRA, passport, utility agency", descUr: "نادرا، پاسپورٹ، یوٹیلیٹی ادارے" },
+  { id: "other",       icon: ShieldAlert,  en: "Other",                   ur: "دیگر",                 desc: "Any other consumer complaint", descUr: "کوئی اور صارف شکایت" },
 ] as const;
 
 type ComplaintTypeId = (typeof TYPES)[number]["id"];
@@ -36,7 +36,6 @@ function Page() {
   const [selectedLang, setSelectedLang] = useState<"en" | "ur" | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useLocalStorage<string | null>("complaint-result", null);
-  const [copied, setCopied] = useState(false);
 
   const setField = (key: keyof ComplaintInput, val: string) => setForm((p) => ({ ...p, [key]: val }));
 
@@ -55,21 +54,6 @@ function Page() {
     }
   }, [form, complaintType, t, setResult]);
 
-  const handleCopy = useCallback(() => {
-    if (!result) return;
-    navigator.clipboard.writeText(result);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [result]);
-
-  const handlePrint = useCallback(() => {
-    if (!result) return;
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(`<!DOCTYPE html><html><head><title>Complaint — PakLegal AI</title><style>body{font-family:sans-serif;padding:2cm;line-height:1.8;}</style></head><body><pre style="white-space:pre-wrap;font-family:sans-serif;">${result.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre></body></html>`);
-    w.document.close(); w.print();
-  }, [result]);
-
   const handleReset = useCallback(() => {
     setResult(null); setForm({}); setComplaintType(null); setSelectedLang(null); setStep("type");
   }, [setResult]);
@@ -84,25 +68,14 @@ function Page() {
         <PageHeader titleEn="Consumer Complaint" titleUr="صارف شکایت"
           descEn="Formal complaint to the relevant Pakistani authority." descUr="متعلقہ پاکستانی ادارے کو باضابطہ شکایت۔" />
         <div className="mx-auto max-w-3xl px-4 sm:px-6 pb-16">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-            <h2 className="font-display text-xl font-semibold">{t("Your Complaint Letter", "آپ کا شکایتی خط")}</h2>
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={handleCopy} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-                {copied ? t("Copied!", "کاپی ہو گیا!") : t("Copy", "کاپی کریں")}
-              </button>
-              <button onClick={handlePrint} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                <Printer className="h-4 w-4" />{t("Print", "پرنٹ")}
-              </button>
-              <button onClick={handleReset} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                <RotateCcw className="h-4 w-4" />{t("New Complaint", "نئی شکایت")}
-              </button>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-[var(--shadow-soft)]">
-            <MarkdownResult text={result} />
-          </div>
-          <p className="mt-4 text-xs text-muted-foreground">⚠️ {t("AI-generated complaint. Review before submission.", "اے آئی سے تیار کردہ شکایت۔ جمع کرانے سے پہلے جانچیں۔")}</p>
+          <DocumentResult
+            text={result}
+            heading={t("Your Complaint Letter", "آپ کا شکایتی خط")}
+            printTitle="Complaint"
+            resetLabel={t("New Complaint", "نئی شکایت")}
+            onReset={handleReset}
+            disclaimer={t("AI-generated complaint. Review before submission.", "اے آئی سے تیار کردہ شکایت۔ جمع کرانے سے پہلے جانچیں۔")}
+          />
         </div>
       </PageShell>
     );
@@ -122,7 +95,7 @@ function Page() {
               <span className={`text-xs hidden sm:inline ${step === s ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                 {t(["Complaint Type", "Your Details", "Language"][i], ["شکایت کی قسم", "آپ کی تفصیلات", "زبان"][i])}
               </span>
-              {i < 2 && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              {i < 2 && <ChevronRight className="rtl:rotate-180 h-4 w-4 text-muted-foreground" />}
             </div>
           ))}
         </div>
@@ -139,7 +112,7 @@ function Page() {
                     <span className="grid h-11 w-11 place-items-center rounded-lg bg-primary/10 text-primary"><Icon className="h-5 w-5" /></span>
                     <div>
                       <h3 className={`font-semibold ${lang === "ur" ? "urdu" : ""}`}>{t(x.en, x.ur)}</h3>
-                      <p className="text-sm text-muted-foreground mt-0.5">{x.desc}</p>
+                      <p className={`text-sm text-muted-foreground mt-0.5 ${lang === "ur" ? "urdu" : ""}`}>{t(x.desc, x.descUr)}</p>
                     </div>
                   </div>
                 </button>
@@ -181,11 +154,11 @@ function Page() {
             </div>
             <div className="mt-6 flex justify-between">
               <button onClick={() => setStep("type")} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition">
-                <ChevronLeft className="h-4 w-4" />{t("Back", "واپس")}
+                <ChevronLeft className="rtl:rotate-180 h-4 w-4" />{t("Back", "واپس")}
               </button>
               <button onClick={() => setStep("language")} disabled={!canProceed}
                 className="inline-flex items-center gap-2 rounded-md bg-[image:var(--gradient-primary)] px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-soft)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition">
-                {t("Next: Choose Language", "اگلا: زبان منتخب کریں")}<ChevronRight className="h-4 w-4" />
+                {t("Next: Choose Language", "اگلا: زبان منتخب کریں")}<ChevronRight className="rtl:rotate-180 h-4 w-4" />
               </button>
             </div>
           </div>
@@ -207,7 +180,7 @@ function Page() {
             </div>
             <div className="mt-6">
               <button onClick={() => setStep("details")} disabled={isLoading} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition">
-                <ChevronLeft className="h-4 w-4" />{t("Back", "واپس")}
+                <ChevronLeft className="rtl:rotate-180 h-4 w-4" />{t("Back", "واپس")}
               </button>
             </div>
           </div>

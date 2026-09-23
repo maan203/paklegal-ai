@@ -9,6 +9,10 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
     if (error != null && typeof error === "object" && "statusCode" in error) {
       throw error;
     }
+    // Requests for server functions that don't exist (bots, stale clients) are not server errors.
+    if (error instanceof Error && error.message.startsWith("Server function info not found")) {
+      return new Response("Not found", { status: 404 });
+    }
     console.error(error);
     return new Response(renderErrorPage(), {
       status: 500,

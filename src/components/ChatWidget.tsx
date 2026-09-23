@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "@tanstack/react-router";
 import { MessageCircle, X, Send, Loader2, Bot, User, RotateCcw } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { askLegalQuestion, type ChatMessage } from "@/lib/ai-functions";
@@ -14,6 +15,7 @@ const SUGGESTIONS = [
 
 export function ChatWidget() {
   const { t, lang } = useLang();
+  const pathname = useLocation({ select: (l) => l.pathname });
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -22,7 +24,7 @@ export function ChatWidget() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, t]);
 
   const send = useCallback(async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -35,16 +37,25 @@ export function ChatWidget() {
       const res = await askLegalQuestion({ data: { messages: updated } });
       setMessages([...updated, { role: "assistant", content: res.text }]);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "An error occurred.";
-      toast.error(msg);
+      // Drop the unanswered question and give it back so the user can retry.
+      setMessages(messages);
+      setInput(text);
+      toast.error(err instanceof Error ? err.message : t("An error occurred.", "خرابی آئی۔"));
     } finally {
       setIsLoading(false);
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, t]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
+    // Ignore Enter while an IME (e.g. Urdu keyboard) is still composing a word.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      send(input);
+    }
   };
+
+  // The full chat page has its own input; the floating button would cover it.
+  if (pathname === "/chat") return null;
 
   return (
     <>
@@ -66,12 +77,12 @@ export function ChatWidget() {
             <div className="flex items-center gap-1">
               {messages.length > 0 && (
                 <button onClick={() => setMessages([])}
-                  className="p-1.5 rounded-md hover:bg-white/20 transition" title="Clear chat">
+                  className="p-1.5 rounded-md hover:bg-white/20 transition" title={t("Clear chat", "چیٹ صاف کریں")} aria-label={t("Clear chat", "چیٹ صاف کریں")}>
                   <RotateCcw className="h-3.5 w-3.5" />
                 </button>
               )}
               <button onClick={() => setOpen(false)}
-                className="p-1.5 rounded-md hover:bg-white/20 transition" aria-label="Close">
+                className="p-1.5 rounded-md hover:bg-white/20 transition" aria-label={t("Close", "بند کریں")}>
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -136,6 +147,7 @@ export function ChatWidget() {
               <button
                 onClick={() => send(input)}
                 disabled={isLoading || !input.trim()}
+                aria-label={t("Send", "بھیجیں")}
                 className="self-end rounded-lg bg-primary p-1.5 text-primary-foreground hover:opacity-90 disabled:opacity-40 transition flex-shrink-0"
               >
                 <Send className="h-3.5 w-3.5" />

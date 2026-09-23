@@ -51,8 +51,9 @@ function Page() {
 
   const categories = [...new Set(RIGHTS.map((r) => r.cat))];
 
+  const query = q.trim().toLowerCase();
   const filtered = RIGHTS.filter((r) => {
-    const matchQ = !q || (r.en + r.ur + r.cat + r.catUr + r.descEn + r.descUr).toLowerCase().includes(q.toLowerCase());
+    const matchQ = !query || [r.en, r.ur, r.cat, r.catUr, r.descEn, r.descUr, r.refEn].join(" ").toLowerCase().includes(query);
     const matchCat = !activecat || r.cat === activecat;
     return matchQ && matchCat;
   });

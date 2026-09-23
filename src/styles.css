@@ -163,3 +163,15 @@
     letter-spacing: -0.02em;
   }
 }
+
+/* AI results can mix English and Urdu: Urdu glyphs fall back to Nastaliq,
+   and each block picks its own direction (dir="auto" in MarkdownResult). */
+.doc-result {
+  font-family: "Inter", "Noto Nastaliq Urdu", ui-sans-serif, system-ui, sans-serif;
+}
+.doc-result :is(h1, h2, h3) {
+  font-family: "Fraunces", "Noto Nastaliq Urdu", ui-serif, Georgia, serif;
+}
+.doc-result :is(p, li) {
+  line-height: 1.9;
+}

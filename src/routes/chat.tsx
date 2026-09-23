@@ -28,7 +28,7 @@ function Page() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, t]);
 
   const send = useCallback(async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -41,15 +41,21 @@ function Page() {
       const res = await askLegalQuestion({ data: { messages: updated } });
       setMessages([...updated, { role: "assistant", content: res.text }]);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "An error occurred.";
-      toast.error(msg);
+      // Drop the unanswered question and give it back so the user can retry.
+      setMessages(messages);
+      setInput(text);
+      toast.error(err instanceof Error ? err.message : t("An error occurred.", "خرابی آئی۔"));
     } finally {
       setIsLoading(false);
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, t]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
+    // Ignore Enter while an IME (e.g. Urdu keyboard) is still composing a word.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      send(input);
+    }
   };
 
   return (
@@ -131,6 +137,7 @@ function Page() {
             <button
               onClick={() => send(input)}
               disabled={isLoading || !input.trim()}
+              aria-label={t("Send", "بھیجیں")}
               className="self-end rounded-xl bg-primary px-4 py-2.5 text-primary-foreground hover:opacity-90 disabled:opacity-40 transition"
             >
               <Send className="h-4 w-4" />

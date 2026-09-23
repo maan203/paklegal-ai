@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Upload, FileText, Printer, RotateCcw, Loader2, ChevronRight, ChevronLeft, Copy, Check } from "lucide-react";
+import { Upload, FileText, Loader2, ChevronRight, ChevronLeft } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { PageHeader } from "@/components/PageHeader";
 import { useLang } from "@/lib/i18n";
 import { useState, useCallback, useRef } from "react";
 import { translateDocument } from "@/lib/ai-functions";
-import { MarkdownResult } from "@/components/MarkdownResult";
+import { DocumentResult } from "@/components/DocumentResult";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { toast } from "sonner";
 
@@ -18,13 +18,46 @@ type Tab = "upload" | "paste";
 type LangChoice = "en" | "ur" | "both";
 type Step = "document" | "language";
 
-function fileToBase64(file: File): Promise<string> {
+function fileToBase64(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve((reader.result as string).split(",")[1]);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+// Phone photos are often several MB; the AI accepts images up to ~3 MB.
+// Downscale to a size that keeps document text readable.
+const MAX_IMAGE_SIDE = 2000;
+async function prepareImage(file: File): Promise<{ base64: string; mediaType: string }> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+    if (scale === 1 && file.size < 1.5 * 1024 * 1024) {
+      bitmap.close();
+      return { base64: await fileToBase64(file), mediaType: file.type };
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas unavailable");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    if (!blob) throw new Error("Could not compress image");
+    return { base64: await fileToBase64(blob), mediaType: "image/jpeg" };
+  } catch {
+    // Browser can't decode this format (e.g. HEIC outside Safari): send as-is.
+    return { base64: await fileToBase64(file), mediaType: file.type };
+  }
+}
+
+function isSupportedFile(f: File): boolean {
+  return f.type === "application/pdf" || f.type.startsWith("image/") || /\.pdf$/i.test(f.name);
 }
 
 function Page() {
@@ -36,13 +69,16 @@ function Page() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLang, setSelectedLang] = useState<LangChoice | null>(null);
   const [result, setResult] = useLocalStorage<string | null>("translator-result", null);
-  const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canProceed = tab === "upload" ? !!file : pasteText.trim().length > 10;
 
   const acceptFile = useCallback(
     (f: File) => {
+      if (!isSupportedFile(f)) {
+        toast.error(t("Please upload a PDF or an image (JPG, PNG).", "براہ کرم پی ڈی ایف یا تصویر (JPG, PNG) اپ لوڈ کریں۔"));
+        return;
+      }
       if (f.size > 10 * 1024 * 1024) {
         toast.error(t("File must be under 10 MB.", "فائل 10 میگابائٹ سے کم ہونی چاہیے۔"));
         return;
@@ -67,8 +103,10 @@ function Page() {
     try {
       let payload: { text?: string; fileBase64?: string; mediaType?: string; language: LangChoice };
       if (tab === "upload" && file) {
-        const base64 = await fileToBase64(file);
-        payload = { fileBase64: base64, mediaType: file.type, language: chosenLang };
+        const { base64, mediaType } = file.type.startsWith("image/")
+          ? await prepareImage(file)
+          : { base64: await fileToBase64(file), mediaType: "application/pdf" };
+        payload = { fileBase64: base64, mediaType, language: chosenLang };
       } else if (tab === "paste" && pasteText.trim().length > 10) {
         payload = { text: pasteText.trim(), language: chosenLang };
       } else {
@@ -84,27 +122,7 @@ function Page() {
     } finally {
       setIsLoading(false);
     }
-  }, [tab, file, pasteText, t]);
-
-  const handleCopy = useCallback(() => {
-    if (!result) return;
-    navigator.clipboard.writeText(result);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [result]);
-
-  const handlePrint = useCallback(() => {
-    if (!result) return;
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(
-      `<!DOCTYPE html><html><head><title>Document Analysis — PakLegal AI</title>` +
-        `<style>body{font-family:sans-serif;padding:2cm;line-height:1.7;}pre{white-space:pre-wrap;font-family:sans-serif;font-size:13px;}</style>` +
-        `</head><body><pre>${result.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre></body></html>`
-    );
-    w.document.close();
-    w.print();
-  }, [result]);
+  }, [tab, file, pasteText, t, setResult]);
 
   const handleReset = useCallback(() => {
     setFile(null);
@@ -113,7 +131,7 @@ function Page() {
     setSelectedLang(null);
     setStep("document");
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, []);
+  }, [setResult]);
 
   if (result) {
     return (
@@ -126,29 +144,14 @@ function Page() {
           descUr="ایف آئی آر، سمن، عدالتی حکم یا قانونی نوٹس اپ لوڈ کریں۔ سادہ زبان میں خلاصہ، اہم تاریخیں، ذمہ داریاں اور خطرات حاصل کریں۔"
         />
         <div className="mx-auto max-w-4xl px-4 sm:px-6 pb-16">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-            <h2 className={`font-display text-xl font-semibold ${lang === "ur" ? "urdu" : ""}`}>
-              {t("Document Analysis", "دستاویز کا تجزیہ")}
-            </h2>
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={handleCopy} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-                {copied ? t("Copied!", "کاپی ہو گیا!") : t("Copy", "کاپی کریں")}
-              </button>
-              <button onClick={handlePrint} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                <Printer className="h-4 w-4" />{t("Print", "پرنٹ")}
-              </button>
-              <button onClick={handleReset} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition">
-                <RotateCcw className="h-4 w-4" />{t("New Analysis", "نیا تجزیہ")}
-              </button>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-[var(--shadow-soft)]">
-            <MarkdownResult text={result} />
-          </div>
-          <p className="mt-4 text-xs text-muted-foreground">
-            {t("⚠️ This analysis is AI-generated for informational purposes only. Consult a lawyer for legal advice.", "⚠️ یہ تجزیہ صرف معلوماتی مقاصد کے لیے ہے۔ قانونی مشورے کے لیے وکیل سے رابطہ کریں۔")}
-          </p>
+          <DocumentResult
+            text={result}
+            heading={t("Document Analysis", "دستاویز کا تجزیہ")}
+            printTitle="Document Analysis"
+            resetLabel={t("New Analysis", "نیا تجزیہ")}
+            onReset={handleReset}
+            disclaimer={t("This analysis is AI-generated for informational purposes only. Consult a lawyer for legal advice.", "یہ تجزیہ صرف معلوماتی مقاصد کے لیے ہے۔ قانونی مشورے کے لیے وکیل سے رابطہ کریں۔")}
+          />
         </div>
       </PageShell>
     );
@@ -177,7 +180,7 @@ function Page() {
               <span className={`text-xs hidden sm:inline ${step === s ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                 {t(["Upload Document", "Choose Language"][i], ["دستاویز اپ لوڈ", "زبان منتخب کریں"][i])}
               </span>
-              {i < 1 && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              {i < 1 && <ChevronRight className="rtl:rotate-180 h-4 w-4 text-muted-foreground" />}
             </div>
           ))}
         </div>
@@ -232,7 +235,7 @@ function Page() {
                   </>
                 )}
                 <input ref={fileInputRef} type="file" accept=".pdf,image/*" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) acceptFile(f); }} />
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) acceptFile(f); e.target.value = ""; }} />
               </div>
             ) : (
               <div className="rounded-2xl border border-border bg-card p-6">
@@ -256,7 +259,7 @@ function Page() {
                 className="inline-flex items-center gap-2 rounded-md bg-[image:var(--gradient-primary)] px-6 py-3 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-soft)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 {t("Next: Choose Language", "اگلا: زبان منتخب کریں")}
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="rtl:rotate-180 h-4 w-4" />
               </button>
             </div>
 
@@ -306,7 +309,7 @@ function Page() {
             </div>
             <div className="mt-6">
               <button onClick={() => setStep("document")} disabled={isLoading} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition disabled:opacity-50">
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="rtl:rotate-180 h-4 w-4" />
                 {t("Back", "واپس")}
               </button>
             </div>
