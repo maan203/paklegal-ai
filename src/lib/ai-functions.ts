@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 import { extractText, getDocumentProxy } from "unpdf";
 import { z } from "zod";
 import { removeEmDashes } from "@/lib/utils";
@@ -602,6 +602,75 @@ export const analyzeSituation = createServerFn({ method: "POST" })
       retrieval,
     );
     return { ...answer, facts };
+  });
+
+// ── Speech to text ───────────────────────────────────────────────────────────
+// The browser records audio; Whisper (on Groq) transcribes it. The transcript is shown to the
+// user to correct before anything is analysed, since names, places and numbers are where
+// transcription most often goes wrong.
+
+const TRANSCRIPTION_MODEL = "whisper-large-v3";
+// About 5 minutes of compressed speech; the UI stops recording at 3 minutes.
+const MAX_AUDIO_BASE64_CHARS = 8 * 1024 * 1024;
+const AUDIO_TYPES = [
+  "audio/webm",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/wav",
+  "audio/x-wav",
+];
+
+export const transcribeAudio = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: unknown): { audioBase64: string; mimeType: string; language: "ur" | "en" } =>
+      validate(
+        z.object({
+          audioBase64: z
+            .string({
+              required_error: "No recording received.",
+              invalid_type_error: "Invalid input.",
+            })
+            .min(100, "The recording is too short. Please try again.")
+            .max(
+              MAX_AUDIO_BASE64_CHARS,
+              "The recording is too long. Please keep it under 3 minutes.",
+            ),
+          // Browsers add codec details ("audio/webm;codecs=opus"); only the base type matters.
+          mimeType: z
+            .string()
+            .transform((t) => t.split(";")[0].trim().toLowerCase())
+            .refine((t) => AUDIO_TYPES.includes(t), "Unsupported audio format."),
+          // Setting the language stops Whisper writing Urdu speech in Hindi script.
+          language: z.enum(["ur", "en"], {
+            errorMap: () => ({ message: "Please choose the language you are speaking." }),
+          }),
+        }),
+        data,
+      ),
+  )
+  .handler(async (ctx): Promise<{ text: string }> => {
+    const { audioBase64, mimeType, language } = ctx.data;
+    const extension = mimeType.split("/")[1].replace("x-", "").replace("mpeg", "mp3");
+    try {
+      const file = await toFile(Buffer.from(audioBase64, "base64"), `recording.${extension}`, {
+        type: mimeType,
+      });
+      const result = await getAI().audio.transcriptions.create({
+        file,
+        model: TRANSCRIPTION_MODEL,
+        language,
+      });
+      const text = result.text.trim();
+      if (!text) throw new Error("empty");
+      return { text };
+    } catch (err) {
+      console.error("Transcription error:", err);
+      if (err instanceof OpenAI.APIError && err.status === 429) {
+        throw new Error("Speech service is busy. Please try again in a minute, or type instead.");
+      }
+      throw new Error("Could not understand the recording. Please try again or type instead.");
+    }
   });
 
 // ── Search the Law ───────────────────────────────────────────────────────────

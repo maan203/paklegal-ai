@@ -26,18 +26,18 @@ function Index() {
 
   const problems = [
     {
-      to: "/situation" as const,
+      to: "/incident" as const,
       icon: MessageSquareText,
       problemEn:
-        "You explain your situation to a lawyer out loud while they take notes, without knowing which laws or rights apply to you.",
+        "When you report an incident at a police station or to a lawyer, you explain it out loud while someone writes it down. Under stress, details get missed and you don't know which laws or rights apply.",
       problemUr:
-        "آپ وکیل کو زبانی اپنا مسئلہ بتاتے ہیں اور وہ نوٹس لیتا ہے، مگر آپ کو معلوم نہیں ہوتا کہ کون سے قوانین اور حقوق آپ پر لاگو ہوتے ہیں۔",
-      titleEn: "Explain My Situation",
-      titleUr: "اپنی صورتحال بتائیں",
+        "تھانے یا وکیل کے پاس آپ واقعہ زبانی بتاتے ہیں اور کوئی اور لکھتا ہے۔ پریشانی میں تفصیلات رہ جاتی ہیں اور آپ کو معلوم نہیں ہوتا کہ کون سے قوانین اور حقوق لاگو ہوتے ہیں۔",
+      titleEn: "Describe Your Incident",
+      titleUr: "اپنا واقعہ بیان کریں",
       solutionEn:
-        "Write or speak what happened in your own words. PakLegal AI picks out the facts, finds the provisions that apply, explains your rights and next steps, and prepares a case summary you can hand to your lawyer.",
+        "Speak or type what happened, in Urdu or English, before you go. PakLegal AI structures it into clear facts for you to check, explains the provisions that may apply, and helps you prepare a written complaint and a summary for your lawyer.",
       solutionUr:
-        "جو ہوا اپنے الفاظ میں لکھیں یا بولیں۔ پاک لیگل اے آئی حقائق سمجھ کر متعلقہ دفعات تلاش کرتا ہے، آپ کے حقوق اور اگلے اقدامات بتاتا ہے، اور وکیل کے لیے مقدمے کا خلاصہ تیار کرتا ہے۔",
+        "جانے سے پہلے جو ہوا اردو یا انگریزی میں بولیں یا لکھیں۔ پاک لیگل اے آئی اسے واضح حقائق میں ترتیب دیتا ہے جنہیں آپ چیک کر سکیں، متعلقہ دفعات سمجھاتا ہے، اور تحریری درخواست اور وکیل کے لیے خلاصہ تیار کرنے میں مدد کرتا ہے۔",
     },
     {
       to: "/translator" as const,
@@ -60,7 +60,8 @@ function Index() {
       icon: Mic,
       en: "Describe",
       ur: "بتائیں",
-      descEn: "Type or speak, in Urdu or English, or upload a document.",
+      descEn:
+        "Speak or type in Urdu or English (speech is transcribed with Whisper), or upload a document.",
       descUr: "اردو یا انگریزی میں لکھیں یا بولیں، یا دستاویز اپ لوڈ کریں۔",
     },
     {
@@ -68,7 +69,7 @@ function Index() {
       en: "Understand",
       ur: "سمجھنا",
       descEn:
-        "The AI turns it into structured facts: events, people, losses, evidence, and what is missing.",
+        "The AI turns it into structured facts (events, people, losses, evidence, what is missing) that you review and correct.",
       descUr: "اے آئی اسے منظم حقائق میں بدلتا ہے: واقعات، افراد، نقصانات، ثبوت، اور کیا باقی ہے۔",
     },
     {
@@ -117,10 +118,10 @@ function Index() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
-                to="/situation"
+                to="/incident"
                 className="inline-flex items-center gap-2 rounded-md bg-[image:var(--gradient-primary)] px-5 py-3 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-elevated)] hover:opacity-95 transition"
               >
-                {t("Explain my situation", "اپنی صورتحال بتائیں")}{" "}
+                {t("Describe your incident", "اپنا واقعہ بیان کریں")}{" "}
                 <ArrowRight className="h-4 w-4 rtl:rotate-180" />
               </Link>
               <Link

@@ -15,7 +15,7 @@ const SUGGESTIONS = [
   { en: "What is Section 420 PPC?", ur: "دفعہ ٤٢٠ تعزیرات پاکستان کیا ہے؟" },
 ];
 
-// Floating "quick question" chat, available on every page except the situation page
+// Floating "quick question" chat, available on every page except the incident page
 // (which has its own follow-up chat).
 export function ChatWidget() {
   const { t, lang } = useLang();
@@ -23,7 +23,7 @@ export function ChatWidget() {
   const [open, setOpen] = useState(false);
   const chat = useLegalChat();
 
-  if (pathname === "/situation") return null;
+  if (pathname === "/incident") return null;
 
   return (
     <>

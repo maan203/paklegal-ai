@@ -10,8 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TranslatorRouteImport } from './routes/translator'
-import { Route as SituationRouteImport } from './routes/situation'
 import { Route as LawRouteImport } from './routes/law'
+import { Route as IncidentRouteImport } from './routes/incident'
 import { Route as IndexRouteImport } from './routes/index'
 
 const TranslatorRoute = TranslatorRouteImport.update({
@@ -19,14 +19,14 @@ const TranslatorRoute = TranslatorRouteImport.update({
   path: '/translator',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SituationRoute = SituationRouteImport.update({
-  id: '/situation',
-  path: '/situation',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LawRoute = LawRouteImport.update({
   id: '/law',
   path: '/law',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IncidentRoute = IncidentRouteImport.update({
+  id: '/incident',
+  path: '/incident',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -37,35 +37,35 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/incident': typeof IncidentRoute
   '/law': typeof LawRoute
-  '/situation': typeof SituationRoute
   '/translator': typeof TranslatorRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/incident': typeof IncidentRoute
   '/law': typeof LawRoute
-  '/situation': typeof SituationRoute
   '/translator': typeof TranslatorRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/incident': typeof IncidentRoute
   '/law': typeof LawRoute
-  '/situation': typeof SituationRoute
   '/translator': typeof TranslatorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/law' | '/situation' | '/translator'
+  fullPaths: '/' | '/incident' | '/law' | '/translator'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/law' | '/situation' | '/translator'
-  id: '__root__' | '/' | '/law' | '/situation' | '/translator'
+  to: '/' | '/incident' | '/law' | '/translator'
+  id: '__root__' | '/' | '/incident' | '/law' | '/translator'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  IncidentRoute: typeof IncidentRoute
   LawRoute: typeof LawRoute
-  SituationRoute: typeof SituationRoute
   TranslatorRoute: typeof TranslatorRoute
 }
 
@@ -78,18 +78,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TranslatorRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/situation': {
-      id: '/situation'
-      path: '/situation'
-      fullPath: '/situation'
-      preLoaderRoute: typeof SituationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/law': {
       id: '/law'
       path: '/law'
       fullPath: '/law'
       preLoaderRoute: typeof LawRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/incident': {
+      id: '/incident'
+      path: '/incident'
+      fullPath: '/incident'
+      preLoaderRoute: typeof IncidentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -104,8 +104,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  IncidentRoute: IncidentRoute,
   LawRoute: LawRoute,
-  SituationRoute: SituationRoute,
   TranslatorRoute: TranslatorRoute,
 }
 export const routeTree = rootRouteImport

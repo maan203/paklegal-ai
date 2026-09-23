@@ -98,34 +98,66 @@ export function buildLawyerBrief(
   return sections.filter(Boolean).join("\n\n");
 }
 
-// A citizen does not write the FIR itself: the police record it under s.154 CrPC. What the citizen
-// submits is an application to the SHO, in their own words. Built only for possible crimes.
-export function buildFirApplication(facts: SituationFacts, narrative: string, lang: Lang): string {
+// Draft complaint for FIR registration. The police record the FIR itself under s.154 CrPC; this is
+// the written complaint the person brings to the SHO, built from the facts they reviewed.
+// Deliberately contains no PPC sections: deciding the offence is for the police, and a wrong
+// section in a complainant's own statement can hurt their case. Plain text, so it can be edited.
+const DRAFT_LABELS = {
+  en: {
+    to: "To,\nThe Station House Officer (SHO),",
+    station: "Police Station",
+    subject:
+      "Subject: Complaint for registration of FIR (Section 154, Code of Criminal Procedure, 1898)",
+    salutation: "Respected Sir/Madam,",
+    intro: (b: string) =>
+      `I, ${b}, son/daughter of ${b}, CNIC No. ${b}, resident of ${b}, phone ${b}, respectfully state as follows:`,
+    events: "What happened:",
+    people: "Persons involved:",
+    losses: "Loss / injury:",
+    evidence: "Witnesses and evidence:",
+    request:
+      "I request that an FIR be registered and the matter investigated according to law. I will cooperate fully with the investigation.",
+    closing: (b: string, date: string) =>
+      `Yours faithfully,\n\nName: ${b}\nCNIC: ${b}\nPhone: ${b}\nSignature: ${b}\nDate: ${date}`,
+  },
+  ur: {
+    to: "بخدمت جناب ایس ایچ او صاحب،",
+    station: "تھانہ",
+    subject: "عنوان: درخواست برائے اندراج مقدمہ (دفعہ 154، ضابطہ فوجداری 1898)",
+    salutation: "جناب عالی!",
+    intro: (b: string) =>
+      `گزارش ہے کہ سائل/سائلہ ${b} ولد/بنت ${b}، شناختی کارڈ نمبر ${b}، سکنہ ${b}، فون ${b} کا بیان درج ذیل ہے:`,
+    events: "واقعہ:",
+    people: "متعلقہ افراد:",
+    losses: "نقصان / چوٹ:",
+    evidence: "گواہ اور ثبوت:",
+    request:
+      "لہٰذا استدعا ہے کہ مقدمہ درج کر کے قانون کے مطابق تفتیش کی جائے۔ میں تفتیش میں مکمل تعاون کروں گا/گی۔",
+    closing: (b: string, date: string) =>
+      `العارض\n\nنام: ${b}\nشناختی کارڈ نمبر: ${b}\nفون نمبر: ${b}\nدستخط: ${b}\nتاریخ: ${date}`,
+  },
+} as const;
+
+export function buildComplaintDraft(facts: SituationFacts, lang: Lang): string {
+  const L = DRAFT_LABELS[lang];
   const blank = "____________";
-  if (lang === "ur") {
-    return [
-      `بخدمت جناب ایس ایچ او صاحب`,
-      `تھانہ ${blank}، ${facts.location || blank}`,
-      `**عنوان: درخواست برائے اندراج مقدمہ (دفعہ 154، ضابطہ فوجداری 1898)**`,
-      `جناب عالی!`,
-      `گزارش ہے کہ سائل/سائلہ ${blank} ولد/بنت ${blank}، شناختی کارڈ نمبر ${blank}، سکنہ ${blank} کا بیان درج ذیل ہے:`,
-      narrative.trim(),
-      facts.evidence.length ? `**ثبوت:**\n${list(facts.evidence, "")}` : "",
-      `لہٰذا استدعا ہے کہ مقدمہ درج کر کے قانونی کارروائی کی جائے۔`,
-      `العارض\n\nنام: ${blank}\nشناختی کارڈ نمبر: ${blank}\nفون نمبر: ${blank}\nدستخط: ${blank}\nتاریخ: ${today("ur")}`,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-  }
+  const bullets = (items: string[]) => items.map((i) => `- ${i}`).join("\n");
+  const events = facts.timeline.length
+    ? facts.timeline.map((e, i) => `${i + 1}. ${e.when ? `${e.when}: ` : ""}${e.what}`).join("\n")
+    : facts.summary;
   return [
-    `To,\nThe Station House Officer (SHO),\nPolice Station ${blank}, ${facts.location || blank}`,
-    `**Subject: Application for registration of FIR (Section 154, Code of Criminal Procedure, 1898)**`,
-    `Respected Sir/Madam,`,
-    `I, ${blank}, son/daughter of ${blank}, CNIC No. ${blank}, resident of ${blank}, respectfully state as follows:`,
-    narrative.trim(),
-    facts.evidence.length ? `**Evidence available:**\n${list(facts.evidence, "")}` : "",
-    `It is therefore requested that an FIR be registered and legal action be taken according to law.`,
-    `Yours faithfully,\n\nName: ${blank}\nCNIC: ${blank}\nPhone: ${blank}\nSignature: ${blank}\nDate: ${today("en")}`,
+    `${L.to}\n${L.station} ${blank}, ${facts.location || blank}`,
+    L.subject,
+    L.salutation,
+    L.intro(blank),
+    `${L.events}\n${events}`,
+    facts.people.length
+      ? `${L.people}\n${bullets(facts.people.map((p) => `${p.role}: ${p.description}`))}`
+      : "",
+    facts.losses.length ? `${L.losses}\n${bullets(facts.losses)}` : "",
+    facts.evidence.length ? `${L.evidence}\n${bullets(facts.evidence)}` : "",
+    L.request,
+    L.closing(blank, today(lang)),
   ]
     .filter(Boolean)
     .join("\n\n");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFirApplication, buildLawyerBrief } from "@/lib/case-summary";
+import { buildComplaintDraft, buildLawyerBrief } from "@/lib/case-summary";
 import type { SituationFacts } from "@/lib/ai-functions";
 import type { LegalSource } from "@/lib/rag/retrieve";
 
@@ -59,18 +59,43 @@ describe("buildLawyerBrief", () => {
   });
 });
 
-describe("buildFirApplication", () => {
-  it("is an application to the SHO under Section 154, with blanks for personal details", () => {
-    const app = buildFirApplication(facts, narrative, "en");
-    expect(app).toContain("Station House Officer");
-    expect(app).toContain("Section 154, Code of Criminal Procedure, 1898");
-    expect(app).toContain(narrative);
-    expect(app).toContain("CNIC No. ____________");
+describe("buildComplaintDraft", () => {
+  const draft = buildComplaintDraft(facts, "en");
+
+  it("is a complaint to the SHO for FIR registration under Section 154", () => {
+    expect(draft).toContain("Station House Officer");
+    expect(draft).toContain(
+      "Complaint for registration of FIR (Section 154, Code of Criminal Procedure, 1898)",
+    );
+    expect(draft).toContain("CNIC No. ____________");
+  });
+
+  it("states the reviewed facts in order", () => {
+    expect(draft).toContain("1. last Tuesday, 11 pm: Robbed outside the shop");
+    expect(draft).toContain("- witness: Neighbour Aslam");
+    expect(draft).toContain("- Rs. 35,000");
+    expect(draft).toContain("Saddar, Rawalpindi");
+  });
+
+  it("names no penal sections, since the police decide the offence", () => {
+    expect(draft).not.toMatch(/PPC|Penal Code|Section 3\d\d/);
+  });
+
+  it("uses the person's corrections", () => {
+    const corrected = buildComplaintDraft(
+      { ...facts, location: "Saddar Bazaar, Rawalpindi", losses: ["Samsung phone", "Rs. 35,000"] },
+      "en",
+    );
+    expect(corrected).toContain("Saddar Bazaar, Rawalpindi");
+    expect(corrected).toContain("- Samsung phone");
   });
 
   it("has an Urdu version", () => {
-    const app = buildFirApplication({ ...facts, language: "ur" }, "کل رات چوری ہوئی", "ur");
-    expect(app).toContain("درخواست برائے اندراج مقدمہ");
-    expect(app).toContain("کل رات چوری ہوئی");
+    const ur = buildComplaintDraft(
+      { ...facts, timeline: [{ when: "کل رات", what: "گھر سے چوری ہوئی" }] },
+      "ur",
+    );
+    expect(ur).toContain("درخواست برائے اندراج مقدمہ");
+    expect(ur).toContain("1. کل رات: گھر سے چوری ہوئی");
   });
 });

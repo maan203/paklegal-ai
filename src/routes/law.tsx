@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ExternalLink, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { PageShell } from "@/components/PageShell";
@@ -32,17 +32,24 @@ function Page() {
   const [searched, setSearched] = useState("");
   const ur = lang === "ur" ? "urdu" : "";
 
+  // Only the latest search may update the page; a slower earlier one must not overwrite it.
+  const latestRequest = useRef(0);
+
   const run = useCallback(
     async (q: string, lawFilter: LawId | undefined) => {
       if (!q.trim()) return;
+      const request = ++latestRequest.current;
       setIsLoading(true);
       try {
-        setResult(await searchLaw({ data: { query: q.trim(), law: lawFilter } }));
+        const found = await searchLaw({ data: { query: q.trim(), law: lawFilter } });
+        if (request !== latestRequest.current) return;
+        setResult(found);
         setSearched(q.trim());
       } catch (err) {
+        if (request !== latestRequest.current) return;
         toast.error(err instanceof Error ? err.message : t("An error occurred.", "خرابی آئی۔"));
       } finally {
-        setIsLoading(false);
+        if (request === latestRequest.current) setIsLoading(false);
       }
     },
     [t],
