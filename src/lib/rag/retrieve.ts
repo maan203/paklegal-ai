@@ -71,32 +71,64 @@ function toSource(
   };
 }
 
+export interface RetrievalOptions {
+  // Only search these laws.
+  laws?: LawId[];
+  // Text to scan for named provisions ("Section 489-F PPC"); defaults to the queries.
+  referenceText?: string;
+  maxSources?: number;
+  maxContextChars?: number;
+  // Drop matches this far below each query's best match; null keeps everything above MIN_SCORE.
+  maxGapFromBest?: number | null;
+}
+
+// Several queries (e.g. the separate legal issues in one incident) are searched together; their
+// results are interleaved so every issue gets its best provisions in before any gets a second.
 export async function retrieveLegalSources(
-  query: string,
-  options: { laws?: LawId[] } = {},
+  queries: string | string[],
+  {
+    laws,
+    referenceText,
+    maxSources = MAX_SOURCES,
+    maxContextChars = MAX_CONTEXT_CHARS,
+    maxGapFromBest = MAX_GAP_FROM_BEST,
+  }: RetrievalOptions = {},
 ): Promise<RetrievalResult> {
+  const queryList = (Array.isArray(queries) ? queries : [queries]).filter((q) => q.trim());
+  if (!queryList.length) return { status: "no_match", sources: [] };
+
   const bindings = await getRagBindings();
   if (!bindings) return { status: "unavailable", sources: [] };
 
   try {
-    const directIds = chunkIdsFor(findReferences(query)).slice(0, MAX_DIRECT_IDS);
-    const [direct, [vector]] = await Promise.all([
+    const named = findReferences(referenceText ?? queryList.join("\n")).filter(
+      (r) => !laws?.length || laws.includes(r.law),
+    );
+    const directIds = chunkIdsFor(named).slice(0, MAX_DIRECT_IDS);
+    const [direct, vectors] = await Promise.all([
       directIds.length ? bindings.index.getByIds(directIds) : Promise.resolve([]),
-      embed(bindings.ai, [expandQuery(query)]),
+      embed(bindings.ai, queryList.map(expandQuery)),
     ]);
-    const { matches } = await bindings.index.query(vector, {
-      topK: TOP_K,
-      returnMetadata: "all",
-      filter: options.laws?.length ? { law: { $in: options.laws } } : undefined,
-    });
+    const perQuery = await Promise.all(
+      vectors.map(async (vector) => {
+        const { matches } = await bindings.index.query(vector, {
+          topK: TOP_K,
+          returnMetadata: "all",
+          filter: laws?.length ? { law: { $in: laws } } : undefined,
+        });
+        const best = Math.max(0, ...matches.map((m) => m.score));
+        const cutoff = Math.max(MIN_SCORE, maxGapFromBest === null ? 0 : best - maxGapFromBest);
+        return matches.filter((m: VectorMatch) => m.score >= cutoff);
+      }),
+    );
+    const interleaved: VectorMatch[] = [];
+    for (let rank = 0; rank < TOP_K; rank++) {
+      for (const matches of perQuery) if (matches[rank]) interleaved.push(matches[rank]);
+    }
 
-    const best = Math.max(0, ...matches.map((m) => m.score));
-    const cutoff = Math.max(MIN_SCORE, best - MAX_GAP_FROM_BEST);
     const candidates = [
       ...direct.map((v) => toSource(v.id, v.metadata, "reference")),
-      ...matches
-        .filter((m: VectorMatch) => m.score >= cutoff)
-        .map((m) => toSource(m.id, m.metadata, "search", m.score)),
+      ...interleaved.map((m) => toSource(m.id, m.metadata, "search", m.score)),
     ];
 
     const sources: LegalSource[] = [];
@@ -104,7 +136,7 @@ export async function retrieveLegalSources(
     let size = 0;
     for (const s of candidates) {
       if (!s || seen.has(s.id)) continue;
-      if (sources.length >= MAX_SOURCES || size + s.text.length > MAX_CONTEXT_CHARS) continue;
+      if (sources.length >= maxSources || size + s.text.length > maxContextChars) continue;
       seen.add(s.id);
       size += s.text.length;
       sources.push(s);

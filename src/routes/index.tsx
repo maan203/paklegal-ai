@@ -1,44 +1,90 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { FileText, ScrollText, ShieldCheck, Gavel, ArrowRight, Sparkles, Scale, AlertTriangle } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpenCheck,
+  FileText,
+  MessageSquareText,
+  Mic,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  ListChecks,
+} from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { useLang } from "@/lib/i18n";
+import stats from "@/lib/rag/stats.json";
 import hero from "@/assets/hero-justice.jpg";
 
 export const Route = createFileRoute("/")({ component: Index });
 
+// Real numbers from the knowledge base (written by scripts/rag/build-knowledge.mjs).
+const PROVISION_COUNT = stats.provisions;
+
 function Index() {
   const { t, lang } = useLang();
+  const ur = lang === "ur" ? "urdu" : "";
 
-  const features = [
+  const problems = [
     {
-      to: "/translator", icon: FileText,
-      en: { title: "Court Order Translator", desc: "Upload any FIR, summons, or court order. Get a plain-language summary in Urdu and English." },
-      ur: { title: "عدالتی حکم کا ترجمہ", desc: "کوئی بھی ایف آئی آر، سمن یا عدالتی حکم اپ لوڈ کریں۔ آسان زبان میں اردو اور انگریزی خلاصہ حاصل کریں۔" },
+      to: "/situation" as const,
+      icon: MessageSquareText,
+      problemEn:
+        "You explain your situation to a lawyer out loud while they take notes, without knowing which laws or rights apply to you.",
+      problemUr:
+        "آپ وکیل کو زبانی اپنا مسئلہ بتاتے ہیں اور وہ نوٹس لیتا ہے، مگر آپ کو معلوم نہیں ہوتا کہ کون سے قوانین اور حقوق آپ پر لاگو ہوتے ہیں۔",
+      titleEn: "Explain My Situation",
+      titleUr: "اپنی صورتحال بتائیں",
+      solutionEn:
+        "Write or speak what happened in your own words. PakLegal AI picks out the facts, finds the provisions that apply, explains your rights and next steps, and prepares a case summary you can hand to your lawyer.",
+      solutionUr:
+        "جو ہوا اپنے الفاظ میں لکھیں یا بولیں۔ پاک لیگل اے آئی حقائق سمجھ کر متعلقہ دفعات تلاش کرتا ہے، آپ کے حقوق اور اگلے اقدامات بتاتا ہے، اور وکیل کے لیے مقدمے کا خلاصہ تیار کرتا ہے۔",
     },
     {
-      to: "/fir", icon: ScrollText,
-      en: { title: "FIR Drafting Assistant", desc: "Describe what happened. We draft a correctly formatted FIR citing PPC and CrPC sections." },
-      ur: { title: "ایف آئی آر کا مسودہ", desc: "اپنا واقعہ بتائیں۔ ہم درست فارمیٹ میں ایف آئی آر تیار کرتے ہیں۔" },
+      to: "/translator" as const,
+      icon: FileText,
+      problemEn:
+        "You pay a lawyer just to find out what a legal notice, summons or court order actually says.",
+      problemUr:
+        "صرف یہ جاننے کے لیے کہ قانونی نوٹس، سمن یا عدالتی حکم میں کیا لکھا ہے، آپ کو وکیل کو فیس دینی پڑتی ہے۔",
+      titleEn: "Document Explainer",
+      titleUr: "دستاویز کی وضاحت",
+      solutionEn:
+        "Upload a PDF or a photo. Get a plain Urdu or English summary, the deadlines, what you must do, and the laws the document mentions explained from their official text.",
+      solutionUr:
+        "پی ڈی ایف یا تصویر اپ لوڈ کریں۔ سادہ اردو یا انگریزی خلاصہ، مہلتیں، آپ کی ذمہ داریاں، اور دستاویز میں مذکور قوانین کی سرکاری متن سے وضاحت حاصل کریں۔",
+    },
+  ];
+
+  const steps = [
+    {
+      icon: Mic,
+      en: "Describe",
+      ur: "بتائیں",
+      descEn: "Type or speak, in Urdu or English, or upload a document.",
+      descUr: "اردو یا انگریزی میں لکھیں یا بولیں، یا دستاویز اپ لوڈ کریں۔",
     },
     {
-      to: "/bail", icon: Scale,
-      en: { title: "Bail Application", desc: "Generate a complete bail application with legal grounds and relevant case law citations." },
-      ur: { title: "ضمانت کی درخواست", desc: "قانونی بنیادوں اور متعلقہ مقدمات کے ساتھ مکمل ضمانت کی درخواست تیار کریں۔" },
+      icon: ListChecks,
+      en: "Understand",
+      ur: "سمجھنا",
+      descEn:
+        "The AI turns it into structured facts: events, people, losses, evidence, and what is missing.",
+      descUr: "اے آئی اسے منظم حقائق میں بدلتا ہے: واقعات، افراد، نقصانات، ثبوت، اور کیا باقی ہے۔",
     },
     {
-      to: "/notice", icon: Gavel,
-      en: { title: "Legal Notice Generator", desc: "Generate formal notices: rent recovery, wrongful termination, bounced cheques and more." },
-      ur: { title: "قانونی نوٹس", desc: "کرایہ، ملازمت، بائونس چیک اور مزید کے لیے باقاعدہ نوٹس تیار کریں۔" },
+      icon: Search,
+      en: "Find the law",
+      ur: "قانون تلاش",
+      descEn: `The relevant provisions are retrieved from ${PROVISION_COUNT.toLocaleString()} Articles and Sections of official Pakistani law.`,
+      descUr: `پاکستانی قانون کی ${PROVISION_COUNT.toLocaleString()} سرکاری دفعات میں سے متعلقہ دفعات تلاش کی جاتی ہیں۔`,
     },
     {
-      to: "/complaint", icon: AlertTriangle,
-      en: { title: "Consumer Complaint", desc: "File complaints against utilities, banks, telecom companies, and government departments." },
-      ur: { title: "صارفین کی شکایت", desc: "یوٹیلیٹی، بینک، ٹیلی کام کمپنیوں اور سرکاری محکموں کے خلاف شکایات درج کریں۔" },
-    },
-    {
-      to: "/rights", icon: ShieldCheck,
-      en: { title: "Know Your Rights", desc: "Your rights under the Constitution of Pakistan 1973, searchable, in plain language." },
-      ur: { title: "اپنے حقوق جانیں", desc: "آئین پاکستان ١٩٧٣ کے تحت آپ کے حقوق، آسان زبان میں۔" },
+      icon: BookOpenCheck,
+      en: "Explain with sources",
+      ur: "حوالوں کے ساتھ وضاحت",
+      descEn: "A plain answer that cites the law it used, with any unverified citation flagged.",
+      descUr:
+        "سادہ جواب جو استعمال شدہ قانون کا حوالہ دیتا ہے، اور غیر تصدیق شدہ حوالے کی نشاندہی کرتا ہے۔",
     },
   ];
 
@@ -46,84 +92,176 @@ function Index() {
     <PageShell>
       {/* HERO */}
       <section className="relative overflow-hidden">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-16 pb-20 lg:pt-24 lg:pb-28 grid lg:grid-cols-12 gap-10 items-center">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-16 pb-16 lg:pt-24 lg:pb-20 grid lg:grid-cols-12 gap-10 items-center">
           <div className="lg:col-span-7">
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
-              {t("AI-powered • Free • Urdu + English", "اے آئی • مفت • اردو اور انگریزی")}
-            </div>
-            <h1 className={`mt-5 font-display text-4xl sm:text-5xl lg:text-6xl font-semibold leading-[1.05] tracking-tight ${lang === "ur" ? "urdu" : ""}`}>
-              {t("The law belongs to everyone, not just those who can afford it.", "قانون سب کا حق ہے، صرف امیروں کا نہیں۔")}
-            </h1>
-            <p className={`mt-6 max-w-xl text-lg text-muted-foreground ${lang === "ur" ? "urdu" : ""}`}>
               {t(
-                "PakLegal AI helps Pakistani citizens understand court documents, file FIRs, and exercise their constitutional rights, for free, in their own language.",
-                "پاک لیگل اے آئی پاکستانی شہریوں کو عدالتی دستاویزات سمجھنے، ایف آئی آر درج کرنے، اور آئینی حقوق استعمال کرنے میں مدد دیتا ہے، مفت، آپ کی اپنی زبان میں۔"
+                "Free • Urdu + English • Grounded in official Pakistani law",
+                "مفت • اردو اور انگریزی • سرکاری پاکستانی قانون پر مبنی",
+              )}
+            </div>
+            <h1
+              className={`mt-5 font-display text-4xl sm:text-5xl lg:text-6xl font-semibold leading-[1.05] tracking-tight ${ur}`}
+            >
+              {t(
+                "Understand your legal situation before you see a lawyer.",
+                "وکیل کے پاس جانے سے پہلے اپنی قانونی صورتحال سمجھیں۔",
+              )}
+            </h1>
+            <p className={`mt-6 max-w-xl text-lg text-muted-foreground ${ur}`}>
+              {t(
+                "Tell PakLegal AI what happened, or show it a document you received. It explains the law that applies in plain language, and shows you exactly where each answer comes from.",
+                "پاک لیگل اے آئی کو بتائیں کیا ہوا، یا ملنے والی دستاویز دکھائیں۔ یہ متعلقہ قانون سادہ زبان میں سمجھاتا ہے اور بتاتا ہے کہ ہر جواب کس قانون سے لیا گیا ہے۔",
               )}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/chat" className="inline-flex items-center gap-2 rounded-md bg-[image:var(--gradient-primary)] px-5 py-3 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-elevated)] hover:opacity-95 transition">
-                {t("Ask a Legal Question", "قانونی سوال پوچھیں")} <ArrowRight className="h-4 w-4 rtl:rotate-180" />
+              <Link
+                to="/situation"
+                className="inline-flex items-center gap-2 rounded-md bg-[image:var(--gradient-primary)] px-5 py-3 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-elevated)] hover:opacity-95 transition"
+              >
+                {t("Explain my situation", "اپنی صورتحال بتائیں")}{" "}
+                <ArrowRight className="h-4 w-4 rtl:rotate-180" />
               </Link>
-              <Link to="/rights" className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-5 py-3 text-sm font-semibold hover:bg-muted transition">
-                {t("Know Your Rights", "اپنے حقوق جانیں")}
+              <Link
+                to="/translator"
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-5 py-3 text-sm font-semibold hover:bg-muted transition"
+              >
+                {t("Explain a document", "دستاویز سمجھیں")}
               </Link>
             </div>
           </div>
-
           <div className="lg:col-span-5">
             <div className="relative rounded-2xl overflow-hidden border border-border bg-card shadow-[var(--shadow-elevated)]">
-              <img src={hero} alt="Justice and Pakistani legal heritage" width={1536} height={1024} className="w-full h-auto" />
+              <img
+                src={hero}
+                alt="Justice and Pakistani legal heritage"
+                width={1536}
+                height={1024}
+                className="w-full h-auto"
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-card/40 to-transparent pointer-events-none" />
             </div>
           </div>
         </div>
       </section>
 
-      {/* FEATURES */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
-        <div className="flex items-end justify-between gap-6 mb-10">
-          <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-primary font-semibold">{t("What we offer", "ہماری خدمات")}</p>
-            <h2 className="mt-2 font-display text-3xl sm:text-4xl font-semibold">{t("Six tools. One purpose.", "چھ اوزار، ایک مقصد")}</h2>
-          </div>
-        </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {features.map((f) => {
-            const Icon = f.icon;
-            const c = lang === "ur" ? f.ur : f.en;
+      {/* PROBLEMS -> SOLUTIONS */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-12">
+        <p className="text-xs uppercase tracking-[0.18em] text-primary font-semibold">
+          {t("Two everyday problems", "دو روزمرہ مسائل")}
+        </p>
+        <h2 className={`mt-2 font-display text-3xl sm:text-4xl font-semibold ${ur}`}>
+          {t("What it solves", "یہ کیا حل کرتا ہے")}
+        </h2>
+        <div className="mt-8 grid lg:grid-cols-2 gap-5">
+          {problems.map((p) => {
+            const Icon = p.icon;
             return (
-              <Link key={f.to} to={f.to}
-                className="group relative rounded-xl border border-border bg-card p-6 hover:border-primary/40 hover:shadow-[var(--shadow-elevated)] transition-all">
-                <div className="flex items-start gap-4">
-                  <span className="grid h-11 w-11 place-items-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors flex-shrink-0">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <div className="flex-1">
-                    <h3 className={`font-display text-xl font-semibold ${lang === "ur" ? "urdu" : ""}`}>{c.title}</h3>
-                    <p className={`mt-2 text-sm text-muted-foreground leading-relaxed ${lang === "ur" ? "urdu" : ""}`}>{c.desc}</p>
+              <Link
+                key={p.to}
+                to={p.to}
+                className="group rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/40 hover:shadow-[var(--shadow-elevated)] transition-all"
+              >
+                <div className="bg-muted/60 px-6 py-4 border-b border-border">
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-wide text-muted-foreground ${ur ? "urdu normal-case" : ""}`}
+                  >
+                    {t("The problem", "مسئلہ")}
+                  </p>
+                  <p className={`mt-1 text-sm text-foreground ${ur}`}>
+                    {t(p.problemEn, p.problemUr)}
+                  </p>
+                </div>
+                <div className="p-6">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <h3 className={`font-display text-xl font-semibold ${ur}`}>
+                      {t(p.titleEn, p.titleUr)}
+                    </h3>
+                    <ArrowRight className="ms-auto h-4 w-4 text-muted-foreground group-hover:text-primary rtl:rotate-180 transition" />
                   </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 rtl:group-hover:-translate-x-1 rtl:rotate-180 transition-all flex-shrink-0" />
+                  <p className={`mt-3 text-sm text-muted-foreground leading-relaxed ${ur}`}>
+                    {t(p.solutionEn, p.solutionUr)}
+                  </p>
                 </div>
               </Link>
             );
           })}
         </div>
+        <Link
+          to="/law"
+          className="mt-5 flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 hover:border-primary/40 transition group"
+        >
+          <Search className="h-5 w-5 text-primary shrink-0" />
+          <p className={`text-sm ${ur}`}>
+            <span className="font-semibold">{t("Search the Law: ", "قانون تلاش کریں: ")}</span>
+            <span className="text-muted-foreground">
+              {t(
+                "look up what the Constitution, PPC, CrPC or PECA actually says, by meaning, in Urdu or English.",
+                "آئین، تعزیرات، ضابطہ فوجداری یا پیکا میں اصل میں کیا لکھا ہے، اردو یا انگریزی میں تلاش کریں۔",
+              )}
+            </span>
+          </p>
+          <ArrowRight className="ms-auto h-4 w-4 text-muted-foreground group-hover:text-primary rtl:rotate-180 transition shrink-0" />
+        </Link>
       </section>
 
-      {/* TRUST BAND */}
+      {/* HOW IT WORKS */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-12">
+        <h2 className={`font-display text-3xl font-semibold ${ur}`}>
+          {t("How it works", "یہ کیسے کام کرتا ہے")}
+        </h2>
+        <ol className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {steps.map((s, i) => {
+            const Icon = s.icon;
+            return (
+              <li key={s.en} className="rounded-xl border border-border bg-card p-5">
+                <div className="flex items-center gap-2 text-primary">
+                  <span className="text-xs font-semibold">{i + 1}</span>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h3 className={`mt-3 font-semibold ${ur}`}>{t(s.en, s.ur)}</h3>
+                <p className={`mt-1 text-sm text-muted-foreground leading-relaxed ${ur}`}>
+                  {t(s.descEn, s.descUr)}
+                </p>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      {/* WHAT IT IS BASED ON */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 pb-12">
         <div className="rounded-2xl border border-border bg-[image:var(--gradient-primary)] text-primary-foreground p-8 sm:p-10 grid sm:grid-cols-3 gap-6">
-          {[
-            { n: "100%", en: "Free, forever", ur: "ہمیشہ مفت" },
-            { n: "6", en: "Legal tools available", ur: "قانونی اوزار" },
-            { n: "1973", en: "Constitutional rights coverage", ur: "آئینی حقوق" },
-          ].map((s) => (
-            <div key={s.n}>
-              <p className="font-display text-4xl font-semibold">{s.n}</p>
-              <p className={`mt-1 text-sm opacity-90 ${lang === "ur" ? "urdu" : ""}`}>{t(s.en, s.ur)}</p>
-            </div>
-          ))}
+          <div>
+            <p className="font-display text-4xl font-semibold">{stats.laws}</p>
+            <p className={`mt-1 text-sm opacity-90 ${ur}`}>
+              {t(
+                "Official Pakistani laws, from Pakistan Code",
+                "پاکستان کوڈ سے سرکاری پاکستانی قوانین",
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="font-display text-4xl font-semibold">
+              {PROVISION_COUNT.toLocaleString()}
+            </p>
+            <p className={`mt-1 text-sm opacity-90 ${ur}`}>
+              {t("Articles and Sections searchable", "قابلِ تلاش دفعات")}
+            </p>
+          </div>
+          <div>
+            <ShieldCheck className="h-9 w-9" />
+            <p className={`mt-1 text-sm opacity-90 ${ur}`}>
+              {t(
+                "Every answer shows its sources; citations not found in them are flagged",
+                "ہر جواب اپنے حوالے دکھاتا ہے، اور غیر مصدقہ حوالوں کی نشاندہی ہوتی ہے",
+              )}
+            </p>
+          </div>
         </div>
       </section>
     </PageShell>

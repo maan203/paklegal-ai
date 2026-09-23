@@ -8,7 +8,7 @@ export function SiteFooter() {
         <p className="mt-2 max-w-2xl">
           {t(
             "Free legal aid for every Pakistani citizen. PakLegal AI is an information tool, not a substitute for a qualified lawyer.",
-            "ہر پاکستانی شہری کے لیے مفت قانونی مدد۔ پاک لیگل اے آئی صرف معلومات فراہم کرتا ہے، یہ کسی مستند وکیل کا متبادل نہیں ہے۔"
+            "ہر پاکستانی شہری کے لیے مفت قانونی مدد۔ پاک لیگل اے آئی صرف معلومات فراہم کرتا ہے، یہ کسی مستند وکیل کا متبادل نہیں ہے۔",
           )}
         </p>
         <p className="mt-6 text-xs">© {new Date().getFullYear()} PakLegal AI</p>

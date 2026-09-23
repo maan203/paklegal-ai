@@ -4,14 +4,15 @@ import { PageShell } from "@/components/PageShell";
 import { PageHeader } from "@/components/PageHeader";
 import { useLang } from "@/lib/i18n";
 import { useState, useCallback, useRef } from "react";
-import { translateDocument } from "@/lib/ai-functions";
+import { translateDocument, type GroundedAnswer } from "@/lib/ai-functions";
 import { DocumentResult } from "@/components/DocumentResult";
+import { LegalSources } from "@/components/LegalSources";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/translator")({
   component: Page,
-  head: () => ({ meta: [{ title: "Court Order Translator | PakLegal AI" }] }),
+  head: () => ({ meta: [{ title: "Document Explainer | PakLegal AI" }] }),
 });
 
 type Tab = "upload" | "paste";
@@ -47,7 +48,9 @@ async function prepareImage(file: File): Promise<{ base64: string; mediaType: st
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.85),
+    );
     if (!blob) throw new Error("Could not compress image");
     return { base64: await fileToBase64(blob), mediaType: "image/jpeg" };
   } catch {
@@ -68,7 +71,10 @@ function Page() {
   const [pasteText, setPasteText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLang, setSelectedLang] = useState<LangChoice | null>(null);
-  const [result, setResult] = useLocalStorage<string | null>("translator-result", null);
+  const [result, setResult] = useLocalStorage<GroundedAnswer | null>(
+    "document-explainer-result",
+    null,
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canProceed = tab === "upload" ? !!file : pasteText.trim().length > 10;
@@ -76,7 +82,12 @@ function Page() {
   const acceptFile = useCallback(
     (f: File) => {
       if (!isSupportedFile(f)) {
-        toast.error(t("Please upload a PDF or an image (JPG, PNG).", "براہ کرم پی ڈی ایف یا تصویر (JPG, PNG) اپ لوڈ کریں۔"));
+        toast.error(
+          t(
+            "Please upload a PDF or an image (JPG, PNG).",
+            "براہ کرم پی ڈی ایف یا تصویر (JPG, PNG) اپ لوڈ کریں۔",
+          ),
+        );
         return;
       }
       if (f.size > 10 * 1024 * 1024) {
@@ -85,7 +96,7 @@ function Page() {
       }
       setFile(f);
     },
-    [t]
+    [t],
   );
 
   const handleDrop = useCallback(
@@ -94,35 +105,51 @@ function Page() {
       const f = e.dataTransfer.files[0];
       if (f) acceptFile(f);
     },
-    [acceptFile]
+    [acceptFile],
   );
 
-  const handleAnalyze = useCallback(async (chosenLang: LangChoice) => {
-    setIsLoading(true);
-    setResult(null);
-    try {
-      let payload: { text?: string; fileBase64?: string; mediaType?: string; language: LangChoice };
-      if (tab === "upload" && file) {
-        const { base64, mediaType } = file.type.startsWith("image/")
-          ? await prepareImage(file)
-          : { base64: await fileToBase64(file), mediaType: "application/pdf" };
-        payload = { fileBase64: base64, mediaType, language: chosenLang };
-      } else if (tab === "paste" && pasteText.trim().length > 10) {
-        payload = { text: pasteText.trim(), language: chosenLang };
-      } else {
-        toast.error(t("Please upload a file or paste document text.", "فائل اپ لوڈ کریں یا متن چسپاں کریں۔"));
+  const handleAnalyze = useCallback(
+    async (chosenLang: LangChoice) => {
+      setIsLoading(true);
+      setResult(null);
+      try {
+        let payload: {
+          text?: string;
+          fileBase64?: string;
+          mediaType?: string;
+          language: LangChoice;
+        };
+        if (tab === "upload" && file) {
+          const { base64, mediaType } = file.type.startsWith("image/")
+            ? await prepareImage(file)
+            : { base64: await fileToBase64(file), mediaType: "application/pdf" };
+          payload = { fileBase64: base64, mediaType, language: chosenLang };
+        } else if (tab === "paste" && pasteText.trim().length > 10) {
+          payload = { text: pasteText.trim(), language: chosenLang };
+        } else {
+          toast.error(
+            t(
+              "Please upload a file or paste document text.",
+              "فائل اپ لوڈ کریں یا متن چسپاں کریں۔",
+            ),
+          );
+          setIsLoading(false);
+          return;
+        }
+        const res = await translateDocument({ data: payload });
+        setResult(res);
+      } catch (err: unknown) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : t("An error occurred. Please try again.", "ایک خرابی آئی۔ دوبارہ کوشش کریں۔");
+        toast.error(msg);
+      } finally {
         setIsLoading(false);
-        return;
       }
-      const res = await translateDocument({ data: payload });
-      setResult(res.text);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t("An error occurred. Please try again.", "ایک خرابی آئی۔ دوبارہ کوشش کریں۔");
-      toast.error(msg);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [tab, file, pasteText, t, setResult]);
+    },
+    [tab, file, pasteText, t, setResult],
+  );
 
   const handleReset = useCallback(() => {
     setFile(null);
@@ -137,20 +164,23 @@ function Page() {
     return (
       <PageShell>
         <PageHeader
-
-          titleEn="Court Order Translator"
-          titleUr="عدالتی حکم کا ترجمہ"
-          descEn="Upload an FIR, summons, court order, or legal notice. Get a plain-language summary, key dates, obligations, and risk flags."
-          descUr="ایف آئی آر، سمن، عدالتی حکم یا قانونی نوٹس اپ لوڈ کریں۔ سادہ زبان میں خلاصہ، اہم تاریخیں، ذمہ داریاں اور خطرات حاصل کریں۔"
+          titleEn="Document Explainer"
+          titleUr="دستاویز کی وضاحت"
+          descEn="Upload a legal notice, summons, FIR or court order, as a PDF or a photo. Get a plain-language summary, deadlines, what you must do, and the laws it mentions explained from their official text."
+          descUr="قانونی نوٹس، سمن، ایف آئی آر یا عدالتی حکم پی ڈی ایف یا تصویر کی صورت میں اپ لوڈ کریں۔ سادہ خلاصہ، مہلتیں، آپ کی ذمہ داریاں، اور اس میں مذکور قوانین کی سرکاری متن سے وضاحت حاصل کریں۔"
         />
         <div className="mx-auto max-w-4xl px-4 sm:px-6 pb-16">
           <DocumentResult
-            text={result}
+            text={result.text}
+            footer={<LegalSources {...result} />}
             heading={t("Document Analysis", "دستاویز کا تجزیہ")}
             printTitle="Document Analysis"
             resetLabel={t("New Analysis", "نیا تجزیہ")}
             onReset={handleReset}
-            disclaimer={t("This analysis is AI-generated for informational purposes only. Consult a lawyer for legal advice.", "یہ تجزیہ صرف معلوماتی مقاصد کے لیے ہے۔ قانونی مشورے کے لیے وکیل سے رابطہ کریں۔")}
+            disclaimer={t(
+              "This analysis is AI-generated for informational purposes only. Consult a lawyer for legal advice.",
+              "یہ تجزیہ صرف معلوماتی مقاصد کے لیے ہے۔ قانونی مشورے کے لیے وکیل سے رابطہ کریں۔",
+            )}
           />
         </div>
       </PageShell>
@@ -160,25 +190,35 @@ function Page() {
   return (
     <PageShell>
       <PageHeader
-
-        titleEn="Court Order Translator"
-        titleUr="عدالتی حکم کا ترجمہ"
-        descEn="Upload an FIR, summons, court order, or legal notice. Get a plain-language summary, key dates, obligations, and risk flags."
-        descUr="ایف آئی آر، سمن، عدالتی حکم یا قانونی نوٹس اپ لوڈ کریں۔ سادہ زبان میں خلاصہ، اہم تاریخیں، ذمہ داریاں اور خطرات حاصل کریں۔"
+        titleEn="Document Explainer"
+        titleUr="دستاویز کی وضاحت"
+        descEn="Upload a legal notice, summons, FIR or court order, as a PDF or a photo. Get a plain-language summary, deadlines, what you must do, and the laws it mentions explained from their official text."
+        descUr="قانونی نوٹس، سمن، ایف آئی آر یا عدالتی حکم پی ڈی ایف یا تصویر کی صورت میں اپ لوڈ کریں۔ سادہ خلاصہ، مہلتیں، آپ کی ذمہ داریاں، اور اس میں مذکور قوانین کی سرکاری متن سے وضاحت حاصل کریں۔"
       />
 
       <div className="mx-auto max-w-4xl px-4 sm:px-6 pb-16">
-
         {/* Step indicator */}
         <div className="flex items-center gap-2 mb-8">
           {(["document", "language"] as Step[]).map((s, i) => (
             <div key={s} className="flex items-center gap-2">
-              <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
-                step === s ? "bg-primary text-primary-foreground" :
-                step === "language" && s === "document" ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-              }`}>{i + 1}</div>
-              <span className={`text-xs hidden sm:inline ${step === s ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-                {t(["Upload Document", "Choose Language"][i], ["دستاویز اپ لوڈ", "زبان منتخب کریں"][i])}
+              <div
+                className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
+                  step === s
+                    ? "bg-primary text-primary-foreground"
+                    : step === "language" && s === "document"
+                      ? "bg-primary/20 text-primary"
+                      : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {i + 1}
+              </div>
+              <span
+                className={`text-xs hidden sm:inline ${step === s ? "text-foreground font-medium" : "text-muted-foreground"}`}
+              >
+                {t(
+                  ["Upload Document", "Choose Language"][i],
+                  ["دستاویز اپ لوڈ", "زبان منتخب کریں"][i],
+                )}
               </span>
               {i < 1 && <ChevronRight className="rtl:rotate-180 h-4 w-4 text-muted-foreground" />}
             </div>
@@ -190,7 +230,12 @@ function Page() {
           <>
             {/* Tabs */}
             <div className="flex rounded-lg border border-border bg-muted p-1 mb-6 w-fit">
-              {([["upload", "Upload File", "فائل اپ لوڈ"], ["paste", "Paste Text", "متن چسپاں"]] as [Tab, string, string][]).map(([id, en, ur]) => (
+              {(
+                [
+                  ["upload", "Upload File", "فائل اپ لوڈ"],
+                  ["paste", "Paste Text", "متن چسپاں"],
+                ] as [Tab, string, string][]
+              ).map(([id, en, ur]) => (
                 <button
                   key={id}
                   onClick={() => setTab(id)}
@@ -212,9 +257,15 @@ function Page() {
                   <div>
                     <FileText className="mx-auto h-10 w-10 text-primary" />
                     <p className="mt-3 font-medium text-foreground">{file.name}</p>
-                    <p className="text-sm text-muted-foreground mt-1">{(file.size / 1024).toFixed(0)} KB · {file.type || "unknown type"}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {(file.size / 1024).toFixed(0)} KB · {file.type || "unknown type"}
+                    </p>
                     <button
-                      onClick={(e) => { e.stopPropagation(); setFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
                       className="mt-3 text-sm text-muted-foreground hover:text-foreground underline"
                     >
                       {t("Remove file", "فائل ہٹائیں")}
@@ -223,30 +274,51 @@ function Page() {
                 ) : (
                   <>
                     <Upload className="mx-auto h-10 w-10 text-primary" />
-                    <p className={`mt-4 font-display text-xl font-semibold ${lang === "ur" ? "urdu" : ""}`}>
+                    <p
+                      className={`mt-4 font-display text-xl font-semibold ${lang === "ur" ? "urdu" : ""}`}
+                    >
                       {t("Drop a PDF or image here", "یہاں پی ڈی ایف یا تصویر رکھیں")}
                     </p>
-                    <p className={`mt-2 text-sm text-muted-foreground ${lang === "ur" ? "urdu" : ""}`}>
-                      {t("Supports PDFs and images. Max 10 MB.", "پی ڈی ایف اور تصاویر کی حمایت۔ زیادہ سے زیادہ ١٠ میگابائٹ۔")}
+                    <p
+                      className={`mt-2 text-sm text-muted-foreground ${lang === "ur" ? "urdu" : ""}`}
+                    >
+                      {t(
+                        "Supports PDFs and images. Max 10 MB.",
+                        "پی ڈی ایف اور تصاویر کی حمایت۔ زیادہ سے زیادہ ١٠ میگابائٹ۔",
+                      )}
                     </p>
                     <span className="mt-6 inline-flex rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">
                       {t("Choose file", "فائل منتخب کریں")}
                     </span>
                   </>
                 )}
-                <input ref={fileInputRef} type="file" accept=".pdf,image/*" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) acceptFile(f); e.target.value = ""; }} />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) acceptFile(f);
+                    e.target.value = "";
+                  }}
+                />
               </div>
             ) : (
               <div className="rounded-2xl border border-border bg-card p-6">
-                <label className={`block text-sm font-semibold mb-2 ${lang === "ur" ? "urdu" : ""}`}>
+                <label
+                  className={`block text-sm font-semibold mb-2 ${lang === "ur" ? "urdu" : ""}`}
+                >
                   {t("Paste the document text below", "دستاویز کا متن نیچے چسپاں کریں")}
                 </label>
                 <textarea
                   rows={12}
                   value={pasteText}
                   onChange={(e) => setPasteText(e.target.value)}
-                  placeholder={t("Paste the text of the court order, FIR, summons, or legal notice here...", "عدالتی حکم، ایف آئی آر، سمن یا قانونی نوٹس کا متن یہاں چسپاں کریں...")}
+                  placeholder={t(
+                    "Paste the text of the court order, FIR, summons, or legal notice here...",
+                    "عدالتی حکم، ایف آئی آر، سمن یا قانونی نوٹس کا متن یہاں چسپاں کریں...",
+                  )}
                   className={`w-full rounded-lg border border-input bg-background p-4 text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none ${lang === "ur" ? "urdu" : ""}`}
                 />
               </div>
@@ -268,9 +340,15 @@ function Page() {
                 { en: "Plain-language summary", ur: "سادہ زبان میں خلاصہ" },
                 { en: "Key dates & deadlines", ur: "اہم تاریخیں اور آخری تاریخ" },
                 { en: "Risk flags & warnings", ur: "خطرات اور انتباہات" },
-                { en: "Glossary of legal terms", ur: "قانونی اصطلاحات کی فرہنگ" },
+                {
+                  en: "Laws it mentions, from their official text",
+                  ur: "مذکور قوانین، سرکاری متن سے",
+                },
               ].map((x) => (
-                <div key={x.en} className="rounded-lg border border-border bg-card p-4 flex items-start gap-3">
+                <div
+                  key={x.en}
+                  className="rounded-lg border border-border bg-card p-4 flex items-start gap-3"
+                >
                   <FileText className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                   <p className={`text-sm ${lang === "ur" ? "urdu" : ""}`}>{t(x.en, x.ur)}</p>
                 </div>
@@ -283,23 +361,37 @@ function Page() {
         {step === "language" && (
           <div>
             <p className={`text-sm text-muted-foreground mb-6 ${lang === "ur" ? "urdu" : ""}`}>
-              {t("Choose the language for your document analysis.", "دستاویز کے تجزیے کی زبان منتخب کریں۔")}
+              {t(
+                "Choose the language for your document analysis.",
+                "دستاویز کے تجزیے کی زبان منتخب کریں۔",
+              )}
             </p>
             <div className="grid sm:grid-cols-3 gap-4">
-              {([
-                { val: "en" as LangChoice,   label: "English", sub: "Analysis in English only" },
-                { val: "ur" as LangChoice,   label: "اردو",    sub: "صرف اردو میں تجزیہ" },
-                { val: "both" as LangChoice, label: "Both / دونوں", sub: "English + Urdu analysis" },
-              ]).map((opt) => (
+              {[
+                { val: "en" as LangChoice, label: "English", sub: "Analysis in English only" },
+                { val: "ur" as LangChoice, label: "اردو", sub: "صرف اردو میں تجزیہ" },
+                {
+                  val: "both" as LangChoice,
+                  label: "Both / دونوں",
+                  sub: "English + Urdu analysis",
+                },
+              ].map((opt) => (
                 <button
                   key={opt.val}
-                  onClick={() => { setSelectedLang(opt.val); handleAnalyze(opt.val); }}
+                  onClick={() => {
+                    setSelectedLang(opt.val);
+                    handleAnalyze(opt.val);
+                  }}
                   disabled={isLoading}
                   className={`rounded-2xl border-2 p-6 text-center transition hover:border-primary hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    selectedLang === opt.val ? "border-primary bg-primary/5" : "border-border bg-card"
+                    selectedLang === opt.val
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-card"
                   }`}
                 >
-                  <p className={`text-xl font-bold mb-1 ${opt.val === "ur" ? "urdu" : ""}`}>{opt.label}</p>
+                  <p className={`text-xl font-bold mb-1 ${opt.val === "ur" ? "urdu" : ""}`}>
+                    {opt.label}
+                  </p>
                   <p className="text-sm text-muted-foreground">{opt.sub}</p>
                   {isLoading && selectedLang === opt.val && (
                     <Loader2 className="h-5 w-5 animate-spin mx-auto mt-3 text-primary" />
@@ -308,7 +400,11 @@ function Page() {
               ))}
             </div>
             <div className="mt-6">
-              <button onClick={() => setStep("document")} disabled={isLoading} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition disabled:opacity-50">
+              <button
+                onClick={() => setStep("document")}
+                disabled={isLoading}
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition disabled:opacity-50"
+              >
                 <ChevronLeft className="rtl:rotate-180 h-4 w-4" />
                 {t("Back", "واپس")}
               </button>

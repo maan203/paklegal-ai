@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Copy, Printer, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useLang } from "@/lib/i18n";
@@ -12,6 +12,8 @@ type Props = {
   resetLabel: string;
   onReset: () => void;
   disclaimer: string;
+  // Shown under the document: the legal sources it was based on.
+  footer?: ReactNode;
 };
 
 // Generated document with Copy / Print / Start-over actions.
@@ -22,6 +24,7 @@ export function DocumentResult({
   resetLabel,
   onReset,
   disclaimer,
+  footer,
 }: Props) {
   const { t, lang } = useLang();
   const [copied, setCopied] = useState(false);
@@ -85,6 +88,7 @@ export function DocumentResult({
       >
         <MarkdownResult text={text} />
       </div>
+      {footer}
       <p className={`mt-4 text-xs text-muted-foreground ${lang === "ur" ? "urdu" : ""}`}>
         ⚠️ {disclaimer}
       </p>

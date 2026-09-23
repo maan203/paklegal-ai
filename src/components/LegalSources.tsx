@@ -1,64 +1,92 @@
 import { AlertTriangle, BookOpen, ExternalLink } from "lucide-react";
 import { useLang } from "@/lib/i18n";
-import type { ChatAnswer } from "@/lib/ai-functions";
+import type { GroundedAnswer } from "@/lib/ai-functions";
+import type { LegalSource } from "@/lib/rag/retrieve";
 
-// Shows which legal provisions an answer was based on. Numbers match the [n] citations in the answer.
-export function LegalSources({
-  sources,
-  retrieval,
-  unsupportedCitations,
-}: Omit<ChatAnswer, "text">) {
+// A source counts as cited when the answer refers to it as [n] or names its number.
+function isCited(text: string, source: LegalSource, index: number): boolean {
+  if (text.includes(`[${index + 1}]`)) return true;
+  const number = source.displayNumber.replace(/[-]/g, "[-‐-―]?");
+  return new RegExp(`(?<![\\dA-Za-z])${number}(?![\\dA-Za-z])`).test(text);
+}
+
+function SourceItem({ source, index }: { source: LegalSource; index: number }) {
+  const { t } = useLang();
+  return (
+    <li>
+      <details className="group rounded-md bg-muted/50 px-2 py-1">
+        <summary className="cursor-pointer list-none text-foreground" dir="ltr">
+          <span className="font-semibold text-primary">[{index + 1}]</span>{" "}
+          <span className="font-medium">
+            {source.unit} {source.displayNumber}, {source.lawName}
+          </span>
+          : {source.title}
+          {source.parts > 1 && (
+            <span className="text-muted-foreground">
+              {" "}
+              (part {source.part} of {source.parts})
+            </span>
+          )}
+        </summary>
+        <p className="mt-1.5 whitespace-pre-line text-muted-foreground leading-relaxed" dir="ltr">
+          {source.text}
+        </p>
+        <a
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 inline-flex items-center gap-1 text-primary underline"
+        >
+          {t("Official text on Pakistan Code", "پاکستان کوڈ پر سرکاری متن")}
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      </details>
+    </li>
+  );
+}
+
+// Shows which legal provisions an answer was based on. Numbers match the [n] citations in the
+// answer; provisions that were retrieved but not used are listed separately.
+export function LegalSources({ text, sources, retrieval, unsupportedCitations }: GroundedAnswer) {
   const { t, lang } = useLang();
   const urdu = lang === "ur" ? "urdu" : "";
+  const indexed = sources.map((source, index) => ({ source, index }));
+  const cited = indexed.filter(({ source, index }) => isCited(text, source, index));
+  const unused = indexed.filter(({ source, index }) => !isCited(text, source, index));
 
   return (
     <div className="mt-3 border-t border-border pt-2 text-xs space-y-2">
-      {sources.length > 0 && (
+      {cited.length > 0 && (
         <div>
           <p className={`flex items-center gap-1.5 font-semibold text-foreground ${urdu}`}>
             <BookOpen className="h-3.5 w-3.5 text-primary" />
             {t(
-              `Legal sources used (${sources.length})`,
-              `استعمال شدہ قانونی حوالہ جات (${sources.length})`,
+              `Legal sources cited (${cited.length})`,
+              `حوالہ دیے گئے قانونی ماخذ (${cited.length})`,
             )}
           </p>
           <ol className="mt-1 space-y-1">
-            {sources.map((s, i) => (
-              <li key={s.id}>
-                <details className="group rounded-md bg-muted/50 px-2 py-1">
-                  <summary className="cursor-pointer list-none text-foreground" dir="ltr">
-                    <span className="font-semibold text-primary">[{i + 1}]</span>{" "}
-                    <span className="font-medium">
-                      {s.unit} {s.displayNumber}, {s.lawName}
-                    </span>
-                    : {s.title}
-                    {s.parts > 1 && (
-                      <span className="text-muted-foreground">
-                        {" "}
-                        (part {s.part} of {s.parts})
-                      </span>
-                    )}
-                  </summary>
-                  <p
-                    className="mt-1.5 whitespace-pre-line text-muted-foreground leading-relaxed"
-                    dir="ltr"
-                  >
-                    {s.text}
-                  </p>
-                  <a
-                    href={s.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-1 inline-flex items-center gap-1 text-primary underline"
-                  >
-                    {t("Official text on Pakistan Code", "پاکستان کوڈ پر سرکاری متن")}
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </details>
-              </li>
+            {cited.map(({ source, index }) => (
+              <SourceItem key={source.id} source={source} index={index} />
             ))}
           </ol>
         </div>
+      )}
+
+      {unused.length > 0 && (
+        <details className="text-muted-foreground">
+          <summary className={`cursor-pointer ${urdu}`}>
+            {t(
+              `Also retrieved, not used in this answer (${unused.length})`,
+              `مزید حاصل شدہ، اس جواب میں استعمال نہیں ہوئے (${unused.length})`,
+            )}
+          </summary>
+          <ol className="mt-1 space-y-1">
+            {unused.map(({ source, index }) => (
+              <SourceItem key={source.id} source={source} index={index} />
+            ))}
+          </ol>
+        </details>
       )}
 
       {retrieval === "no_match" && (

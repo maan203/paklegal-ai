@@ -7,6 +7,10 @@ const GLOSSARY: [RegExp, string][] = [
     /\bfir\b|ایف آئی آر|پرچہ/i,
     "first information report; information relating to a cognizable offence given to the officer in charge of a police station",
   ],
+  [
+    /refus\w*.{0,40}(register|write|record|lodge|file|take|accept)|(register|lodge|record|file)\w*.{0,25}(complaint|case|report)|درج نہیں|مقدمہ درج/i,
+    "police refusing to register an FIR; information in cognizable cases to officer in charge of police station; Justice of the Peace directions to police to register a case",
+  ],
   [/bounc|چیک/i, "dishonestly issuing a cheque which is dishonoured on presentation"],
   [/ضمانت/, "bail"],
   [/گرفتار/, "arrest"],

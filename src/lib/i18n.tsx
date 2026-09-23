@@ -9,7 +9,8 @@ export function LangProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("en");
 
   useEffect(() => {
-    const saved = (typeof window !== "undefined" && localStorage.getItem("paklegal-lang")) as Lang | null;
+    const saved = (typeof window !== "undefined" &&
+      localStorage.getItem("paklegal-lang")) as Lang | null;
     if (saved === "en" || saved === "ur") setLangState(saved);
   }, []);
 

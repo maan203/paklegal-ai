@@ -67,7 +67,7 @@
   --muted: oklch(0.94 0.018 90);
   --muted-foreground: oklch(0.48 0.025 150);
 
-  --accent: oklch(0.78 0.13 75);  /* warm gold accent */
+  --accent: oklch(0.78 0.13 75); /* warm gold accent */
   --accent-foreground: oklch(0.22 0.04 80);
 
   --destructive: oklch(0.55 0.22 28);
@@ -131,11 +131,15 @@
     color: var(--color-foreground);
     min-height: 100vh;
   }
-  [dir="rtl"], .urdu {
+  [dir="rtl"],
+  .urdu {
     font-family: var(--font-urdu);
     line-height: 2;
   }
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     font-family: var(--font-display);
     letter-spacing: -0.02em;
   }

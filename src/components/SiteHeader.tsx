@@ -5,12 +5,9 @@ import { useLang } from "@/lib/i18n";
 
 const NAV = [
   { to: "/", en: "Home", ur: "ہوم" },
-  { to: "/translator", en: "Translator", ur: "ترجمہ" },
-  { to: "/fir", en: "Draft FIR", ur: "ایف آئی آر" },
-  { to: "/bail", en: "Bail App.", ur: "ضمانت" },
-  { to: "/notice", en: "Notice", ur: "نوٹس" },
-  { to: "/complaint", en: "Complaint", ur: "شکایت" },
-  { to: "/rights", en: "Rights", ur: "حقوق" },
+  { to: "/situation", en: "Explain My Situation", ur: "اپنی صورتحال بتائیں" },
+  { to: "/translator", en: "Document Explainer", ur: "دستاویز کی وضاحت" },
+  { to: "/law", en: "Search the Law", ur: "قانون تلاش کریں" },
 ] as const;
 
 export function SiteHeader() {
@@ -33,7 +30,7 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="hidden lg:flex items-center gap-1" aria-label={t("Main", "مرکزی")}>
+        <nav className="hidden md:flex items-center gap-1" aria-label={t("Main", "مرکزی")}>
           {NAV.map((n) => (
             <Link
               key={n.to}
@@ -62,7 +59,7 @@ export function SiteHeader() {
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className="lg:hidden inline-flex items-center justify-center rounded-md border border-border bg-card p-2 hover:bg-muted transition-colors"
+            className="md:hidden inline-flex items-center justify-center rounded-md border border-border bg-card p-2 hover:bg-muted transition-colors"
             aria-label={menuOpen ? t("Close menu", "مینو بند کریں") : t("Open menu", "مینو کھولیں")}
             aria-expanded={menuOpen}
             aria-controls="mobile-nav"
@@ -75,7 +72,7 @@ export function SiteHeader() {
       {menuOpen && (
         <nav
           id="mobile-nav"
-          className="lg:hidden border-t border-border/60 bg-background"
+          className="md:hidden border-t border-border/60 bg-background"
           aria-label={t("Main", "مرکزی")}
         >
           <div className="mx-auto max-w-7xl px-4 sm:px-6 py-2 grid gap-1">

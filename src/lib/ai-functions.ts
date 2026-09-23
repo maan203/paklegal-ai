@@ -5,18 +5,25 @@ import { z } from "zod";
 import { removeEmDashes } from "@/lib/utils";
 import {
   buildContextBlock,
+  CITATION_RULES,
   findUnsupportedCitations,
   LEGAL_CONTEXT_RULES,
   normalizeCitationMarks,
 } from "@/lib/rag/context";
-import { retrieveLegalSources, type LegalSource, type RetrievalStatus } from "@/lib/rag/retrieve";
+import {
+  retrieveLegalSources,
+  type LegalSource,
+  type RetrievalResult,
+  type RetrievalStatus,
+} from "@/lib/rag/retrieve";
+import { LAWS, type LawId } from "@/lib/rag/laws";
 
 // Groq free tier (OpenAI-compatible API). Override with GROQ_MODEL / GROQ_VISION_MODEL if needed.
 const DEFAULT_MODEL = "openai/gpt-oss-120b";
 const DEFAULT_VISION_MODEL = "qwen/qwen3.8-27b";
 
-// Keeps a document well inside the free tier's 8,000 tokens-per-minute limit.
-const MAX_DOCUMENT_CHARS = 12000;
+// Keeps a document plus its legal context inside the free tier's 8,000 tokens-per-minute limit.
+const MAX_DOCUMENT_CHARS = 10000;
 // Groq rejects base64 images larger than 4 MB.
 const MAX_IMAGE_BASE64_CHARS = 4 * 1024 * 1024;
 // The UI allows 10 MB files; base64 adds ~33%.
@@ -37,9 +44,6 @@ const field = (max: number, missingMessage = "Please fill in all required fields
     .max(max, `One of the fields is too long (maximum ${max} characters).`);
 const required = (max: number, message: string) => field(max, message).min(1, message);
 const optional = (max: number) => field(max).optional();
-const outputLanguage = z.enum(["en", "ur"], {
-  errorMap: () => ({ message: "Please select a language." }),
-});
 
 function validate<T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer<T> {
   const result = schema.safeParse(data);
@@ -47,13 +51,6 @@ function validate<T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer<T> 
     throw new Error(result.error.issues[0]?.message ?? "Invalid input.");
   }
   return result.data;
-}
-
-function formatDetails(fields: Record<string, string | undefined>): string {
-  return Object.entries(fields)
-    .filter(([, v]) => v)
-    .map(([k, v]) => `- ${k}: ${v}`)
-    .join("\n");
 }
 
 function todayInPakistan(): string {
@@ -77,15 +74,40 @@ function getAI() {
 
 type Message = OpenAI.Chat.ChatCompletionMessageParam;
 
+interface CompleteOptions {
+  model?: string;
+  maxTokens?: number;
+  // Forces a JSON reply matching this schema (Groq structured outputs).
+  jsonSchema?: { name: string; schema: Record<string, unknown> };
+  reasoningEffort?: "low" | "medium" | "high";
+  // 0 makes the output repeatable (used for fact extraction).
+  temperature?: number;
+}
+
 async function complete(
   messages: Message[],
-  model = process.env.GROQ_MODEL || DEFAULT_MODEL,
-  maxTokens?: number,
+  {
+    model = process.env.GROQ_MODEL || DEFAULT_MODEL,
+    maxTokens,
+    jsonSchema,
+    reasoningEffort,
+    temperature,
+  }: CompleteOptions = {},
 ): Promise<{ text: string }> {
   const ai = getAI();
   try {
-    const completion = await ai.chat.completions.create({ model, messages, max_tokens: maxTokens });
-    return { text: removeEmDashes(completion.choices[0]?.message?.content ?? "") };
+    const completion = await ai.chat.completions.create({
+      model,
+      messages,
+      max_tokens: maxTokens,
+      reasoning_effort: reasoningEffort,
+      temperature,
+      response_format: jsonSchema
+        ? { type: "json_schema", json_schema: { ...jsonSchema, strict: true } }
+        : undefined,
+    });
+    const content = completion.choices[0]?.message?.content ?? "";
+    return { text: jsonSchema ? content : removeEmDashes(content) };
   } catch (err) {
     console.error("Groq API error:", err);
     if (err instanceof OpenAI.APIError) {
@@ -118,60 +140,6 @@ async function complete(
     throw new Error(`The AI service is unavailable right now${detail}. Please try again.`);
   }
 }
-
-// Legal documents must not contain made-up facts, figures or citations.
-const FACTS_RULE = `Accuracy rules:
-- Use ONLY the facts the user provided. Do not add events, dates, amounts, fees, deadlines or documents that were not given.
-- Never invent names, addresses, phone numbers, CNICs, case numbers or reference numbers. Write a clear [placeholder] instead.
-- Cite only Pakistani laws and sections you are certain exist. If unsure of an exact section number, name the law without a section.`;
-
-const FIR_SYSTEM_PROMPT = `You are a senior Pakistani criminal lawyer with expertise in the Code of Criminal Procedure (CrPC) 1898 and Pakistan Penal Code (PPC) 1860.
-
-Generate a properly formatted FIR (First Information Report) following Form 154 of the CrPC, in the language the user requests, using this structure:
-
----
-FIRST INFORMATION REPORT (FIR)
-Police Station: [Name of Police Station], [City]
-FIR No: ______/[Current Year]        Date: [Today's Date]        Time: [Time of Filing]
-
-1. COMPLAINANT INFORMATION
-Name: [Complainant Name]
-CNIC: [CNIC Number]
-Address: [Complete Address]
-Phone: [Phone Number]
-
-2. INCIDENT DETAILS
-Date of Incident: [Date]
-Time of Incident: [Time]
-Place of Incident: [Exact Location]
-
-3. NARRATION OF FACTS
-[Write a detailed, formal narration of the incident based on the provided description. Use third-person legal language.]
-
-4. APPLICABLE LEGAL PROVISIONS
-[List the relevant PPC sections with brief explanation of each one as it applies to this case]
-
-5. PROPERTY / EVIDENCE (if applicable)
-[List any property, items, or evidence involved]
-
-6. SUSPECT DESCRIPTION (if available)
-[Physical description or identification details if provided]
-
-7. WITNESSES
-1. [Witness 1 - Name and Contact Placeholder]
-2. [Witness 2 - Name and Contact Placeholder]
-
-8. VERIFICATION
-I, the undersigned complainant, hereby declare that the above information is true and correct to the best of my knowledge and belief.
-
-Complainant Signature: _____________    Date: _____________
----
-
-When Urdu is requested, write the complete FIR in formal Urdu following the exact same structure.
-
-${FACTS_RULE}
-
-Be precise about PPC sections. Common sections: theft (379-382), robbery (392-395), cheating/fraud (420), murder (302), grievous hurt (337), extortion (383-387), criminal breach of trust (405-409), kidnapping (365-369), sexual assault (376), trespass (441-447), cybercrime (PECA 2016). Match sections to what occurred.`;
 
 const TRANSLATOR_SYSTEM_PROMPT = `You are a Pakistani legal expert helping ordinary citizens understand complex legal documents. Be empathetic and clear. Write as if explaining to someone with no legal background.
 
@@ -206,115 +174,55 @@ Analyze the provided document and output EXACTLY this structure:
 [Same in Urdu]
 
 ---
+## LAWS MENTIONED
+[For each Article/Section the document cites, or that clearly applies to it: what it says in plain words, citing the LEGAL CONTEXT extract as [1], [2]. Use ONLY provisions in the LEGAL CONTEXT. If the document cites a provision that is not in the LEGAL CONTEXT, name it and say its text was not available. If none apply, write "None".]
+
+## متعلقہ قوانین
+[Same in Urdu]
+
+---
 ## LEGAL TERMS EXPLAINED
 [For each key legal term: Term: plain English definition]
 
 ## قانونی اصطلاحات
 [Same in Urdu]
----`;
-
-const NOTICE_SYSTEM_PROMPT = `You are an experienced Pakistani advocate generating a formal legal notice for a client.
-
-Generate a professionally formatted legal notice following Pakistani legal conventions. The notice must:
-- Have a proper LEGAL NOTICE header with date
-- Name the sending and receiving parties clearly
-- Present background facts chronologically
-- Cite only Pakistani law (never Indian statutes), e.g. Contract Act 1872, Rent Restriction Ordinances, EOBI Act, PPC 1860, CrPC 1898, Sale of Goods Act, Consumer Protection Act, etc.
-- State a specific demand with a clear deadline (14 days urgent, 30 days standard)
-- State consequences of non-compliance
-- End with a professional advocate signature block
-
-Output TWO complete versions:
-
-ENGLISH NOTICE:
----
-[Complete formal legal notice in English]
 ---
 
-URDU NOTICE (اردو نوٹس):
----
-[Complete formal legal notice in formal Urdu]
----
+${CITATION_RULES}`;
 
-${FACTS_RULE}`;
-
-function buildNoticePrompt(data: Record<string, string>): string {
-  const { noticeType, ...fields } = data;
-  const typeDescriptions: Record<string, string> = {
-    landlord: "Landlord-Tenant dispute",
-    employment: "Employment dispute (wrongful termination or unpaid wages)",
-    consumer: "Consumer complaint (defective goods or service fraud)",
-    property: "Property dispute (boundary or encroachment)",
-    cheque: "Dishonoured cheque notice under Section 489-F PPC",
-  };
-  const typeDesc = typeDescriptions[noticeType] || noticeType;
-  const fieldsList = Object.entries(fields)
-    .filter(([, v]) => v?.trim())
-    .map(([k, v]) => `- ${k}: ${v}`)
-    .join("\n");
-  return `Generate a formal legal notice for a ${typeDesc} case with these details:\n\n${fieldsList}`;
-}
-
-export type NoticeInput = { noticeType: string; [key: string]: string };
-
-export type FIRInput = {
-  description: string;
-  language: "en" | "ur";
-  name?: string;
-  cnic?: string;
-  address?: string;
-  phone?: string;
-  incidentDate?: string;
-  incidentTime?: string;
-  place?: string;
-  witness1?: string;
-  witness2?: string;
+// Every AI answer grounded in the legal knowledge base comes with its sources.
+export type GroundedAnswer = {
+  text: string;
+  // Provisions retrieved from the knowledge base and given to the model for this answer.
+  sources: LegalSource[];
+  retrieval: RetrievalStatus;
+  // Provisions the answer mentions that were not among the retrieved sources.
+  unsupportedCitations: string[];
 };
 
-const FIR_DETAIL_MESSAGE = "Please provide more detail about the incident (at least 20 characters).";
+async function groundedComplete(
+  messages: Message[],
+  retrieval: { status: RetrievalStatus; sources: LegalSource[] },
+): Promise<GroundedAnswer> {
+  const answer = await complete(messages);
+  const text = normalizeCitationMarks(answer.text);
+  return {
+    text,
+    sources: retrieval.sources,
+    retrieval: retrieval.status,
+    unsupportedCitations: findUnsupportedCitations(text, retrieval.sources),
+  };
+}
 
-const firSchema = z.object({
-  description: field(LONG_FIELD, FIR_DETAIL_MESSAGE).min(20, FIR_DETAIL_MESSAGE),
-  language: outputLanguage,
-  name: optional(SHORT_FIELD),
-  cnic: optional(SHORT_FIELD),
-  address: optional(SHORT_FIELD),
-  phone: optional(SHORT_FIELD),
-  incidentDate: optional(SHORT_FIELD),
-  incidentTime: optional(SHORT_FIELD),
-  place: optional(SHORT_FIELD),
-  witness1: optional(SHORT_FIELD),
-  witness2: optional(SHORT_FIELD),
-});
-
-export const generateFIRDraft = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown): FIRInput => validate(firSchema, data))
-  .handler(async (ctx) => {
-    const { description, language, name, cnic, address, phone, incidentDate, incidentTime, place, witness1, witness2 } = ctx.data;
-
-    const langInstruction = language === "ur"
-      ? "Generate the FIR in URDU ONLY. Do not include an English version."
-      : "Generate the FIR in ENGLISH ONLY. Do not include an Urdu version.";
-
-    const knownFields = [
-      name && `Complainant Name: ${name}`,
-      cnic && `CNIC: ${cnic}`,
-      address && `Address: ${address}`,
-      phone && `Phone: ${phone}`,
-      incidentDate && `Date of Incident: ${incidentDate}`,
-      incidentTime && `Time of Incident: ${incidentTime}`,
-      place && `Place of Incident: ${place}`,
-      witness1 && `Witness 1: ${witness1}`,
-      witness2 && `Witness 2: ${witness2}`,
-    ].filter(Boolean).join("\n");
-
-    const userPrompt = `${langInstruction}\nToday's date: ${todayInPakistan()}\n\nIncident Description:\n${description}${knownFields ? `\n\nAdditional Details Provided:\n${knownFields}` : ""}`;
-
-    return complete([
-      { role: "system", content: FIR_SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ]);
-  });
+function logRetrieval(
+  feature: string,
+  retrieval: { status: RetrievalStatus; sources: LegalSource[] },
+  contextChars: number,
+) {
+  console.log(
+    `RAG ${feature} ${retrieval.status}: ${retrieval.sources.map((s) => s.id).join(", ") || "no sources"} (${contextChars} chars of context sent to model)`,
+  );
+}
 
 export const translateDocument = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
@@ -333,13 +241,15 @@ export const translateDocument = createServerFn({ method: "POST" })
       data,
     ),
   )
-  .handler(async (ctx) => {
+  .handler(async (ctx): Promise<GroundedAnswer> => {
     const { text, fileBase64, mediaType, language = "both" } = ctx.data;
 
     const langInstruction =
-      language === "en" ? "\n\nIMPORTANT: Output the analysis in ENGLISH ONLY. Do not include any Urdu sections." :
-      language === "ur" ? "\n\nاہم: تجزیہ صرف اردو میں فراہم کریں۔ انگریزی حصے شامل نہ کریں۔" :
-      "";
+      language === "en"
+        ? "\n\nIMPORTANT: Output the analysis in ENGLISH ONLY. Do not include any Urdu sections."
+        : language === "ur"
+          ? "\n\nاہم: تجزیہ صرف اردو میں فراہم کریں۔ انگریزی حصے شامل نہ کریں۔"
+          : "";
     const instruction = `Today's date: ${todayInPakistan()}\n\nAnalyze this legal document:${langInstruction}`;
     const system: Message = { role: "system", content: TRANSLATOR_SYSTEM_PROMPT };
 
@@ -362,10 +272,24 @@ export const translateDocument = createServerFn({ method: "POST" })
       }
     }
 
-    return complete([
-      system,
-      { role: "user", content: `${instruction}\n\n${documentText.slice(0, MAX_DOCUMENT_CHARS)}` },
-    ]);
+    // Provisions the document cites ("u/s 489-F PPC") are looked up directly; its opening
+    // (usually the subject and facts) is also searched by meaning.
+    const documentExcerpt = documentText.slice(0, MAX_DOCUMENT_CHARS);
+    const retrieval = await retrieveLegalSources(documentExcerpt.slice(0, 1500), {
+      referenceText: documentExcerpt,
+      maxSources: 4,
+      maxContextChars: 4500,
+    });
+    const context = buildContextBlock(retrieval);
+    logRetrieval("document", retrieval, context.length);
+
+    return groundedComplete(
+      [
+        system,
+        { role: "user", content: `${instruction}\n\n${context}\n\nDOCUMENT:\n${documentExcerpt}` },
+      ],
+      retrieval,
+    );
   });
 
 // The free vision model allows only ~1,000 output tokens per minute, too few for a full
@@ -389,8 +313,10 @@ async function transcribeImage(base64: string, mediaType: string): Promise<strin
         ],
       },
     ],
-    process.env.GROQ_VISION_MODEL || DEFAULT_VISION_MODEL,
-    TRANSCRIPTION_MAX_TOKENS,
+    {
+      model: process.env.GROQ_VISION_MODEL || DEFAULT_VISION_MODEL,
+      maxTokens: TRANSCRIPTION_MAX_TOKENS,
+    },
   );
   if (!text.trim()) {
     throw new Error("Could not read any text in this image. Please upload a clearer photo.");
@@ -409,43 +335,11 @@ async function extractPdfText(bytes: Uint8Array): Promise<string> {
   }
 }
 
-const noticeSchema = z
-  .object({
-    noticeType: z.enum(["landlord", "employment", "consumer", "property", "cheque"], {
-      errorMap: () => ({ message: "Please select a notice type." }),
-    }),
-  })
-  .catchall(field(LONG_FIELD))
-  .refine((d) => Object.keys(d).length <= 20, "Too many fields.")
-  .refine(
-    (d) => Object.keys(d).every((k) => /^[A-Za-z]{1,40}$/.test(k)),
-    "Invalid field name.",
-  );
-
-export const generateLegalNotice = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown): NoticeInput => validate(noticeSchema, data))
-  .handler(async (ctx) => {
-    return complete([
-      { role: "system", content: NOTICE_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `Today's date: ${todayInPakistan()}\n\n${buildNoticePrompt(ctx.data)}`,
-      },
-    ]);
-  });
-
 // ── Legal Chat ──────────────────────────────────────────────────────────────
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
-export type ChatAnswer = {
-  text: string;
-  // Provisions retrieved from the knowledge base and given to the model for this answer.
-  sources: LegalSource[];
-  retrieval: RetrievalStatus;
-  // Provisions the answer mentions that were not among the retrieved sources.
-  unsupportedCitations: string[];
-};
+export type ChatAnswer = GroundedAnswer;
 
 const CHAT_SYSTEM_PROMPT = `You are PakLegal AI, a knowledgeable Pakistani legal assistant. You help ordinary Pakistani citizens understand the law in plain language.
 
@@ -511,159 +405,230 @@ export const askLegalQuestion = createServerFn({ method: "POST" })
     const history = recentHistory(ctx.data.messages);
     const question = history[history.length - 1];
     const context = buildContextBlock(retrieval);
-    console.log(
-      `RAG ${retrieval.status}: ${retrieval.sources.map((s) => s.id).join(", ") || "no sources"} (${context.length} chars of context sent to model)`,
+    logRetrieval("chat", retrieval, context.length);
+
+    return groundedComplete(
+      [
+        { role: "system", content: `${CHAT_SYSTEM_PROMPT}\n\nToday's date: ${todayInPakistan()}` },
+        ...history.slice(0, -1),
+        { role: "user", content: `${context}\n\nQUESTION:\n${question.content}` },
+      ],
+      retrieval,
     );
-    const answer = await complete([
-      { role: "system", content: `${CHAT_SYSTEM_PROMPT}\n\nToday's date: ${todayInPakistan()}` },
-      ...history.slice(0, -1),
-      {
-        role: "user",
-        content: `${context}\n\nQUESTION:\n${question.content}`,
-      },
-    ]);
-    const text = normalizeCitationMarks(answer.text);
-
-    return {
-      text,
-      sources: retrieval.sources,
-      retrieval: retrieval.status,
-      unsupportedCitations: findUnsupportedCitations(text, retrieval.sources),
-    };
   });
 
-// ── Bail Application ─────────────────────────────────────────────────────────
+// ── Explain My Situation ─────────────────────────────────────────────────────
+// The person describes what happened in their own words. Three steps:
+//   1. Extract the facts into a fixed JSON structure (Groq structured outputs).
+//   2. Retrieve the law for each legal issue found in those facts.
+//   3. Explain their position from the retrieved law, in their language.
 
-const BAIL_SYSTEM_PROMPT = `You are a senior Pakistani criminal defence lawyer. Generate a formal bail application for Sessions Court or High Court under the Code of Criminal Procedure (CrPC) 1898.
+const SITUATION_CATEGORIES = [
+  "theft_or_robbery",
+  "fraud_or_cheque",
+  "violence_or_threats",
+  "harassment",
+  "cybercrime",
+  "arrest_or_police",
+  "property_or_tenancy",
+  "family",
+  "employment",
+  "consumer",
+  "other",
+] as const;
 
-The application must include:
-- Court heading and case details
-- Applicant/accused details
-- FIR details (if provided)
-- Grounds for bail (health, ties to community, no flight risk, presumption of innocence, delay in trial, etc.)
-- Legal provisions (Section 496-498 CrPC, Article 10 Constitution, relevant case law)
-- Prayer / relief sought
-- Advocate signature block
-
-Output in the requested language only. Use formal legal language. Cite only Pakistani law, never Indian statutes.
-
-${FACTS_RULE}`;
-
-export type BailInput = {
-  accusedName: string;
-  accusedAddress: string;
-  accusedCnic?: string;
-  firNumber?: string;
-  policeStation?: string;
-  sections?: string;
-  arrestDate?: string;
-  court: string;
-  grounds: string;
-  advocateName?: string;
-  language: "en" | "ur";
-};
-
-const bailSchema = z.object({
-  accusedName: required(SHORT_FIELD, "Please provide the accused's name."),
-  accusedAddress: required(SHORT_FIELD, "Please provide the accused's address."),
-  accusedCnic: optional(SHORT_FIELD),
-  firNumber: optional(SHORT_FIELD),
-  policeStation: optional(SHORT_FIELD),
-  sections: optional(SHORT_FIELD),
-  arrestDate: optional(SHORT_FIELD),
-  court: required(SHORT_FIELD, "Please specify the court."),
-  grounds: required(LONG_FIELD, "Please provide grounds for bail."),
-  advocateName: optional(SHORT_FIELD),
-  language: outputLanguage,
+const factsSchema = z.object({
+  language: z.enum(["en", "ur"]),
+  summary: z.string(),
+  category: z.enum(SITUATION_CATEGORIES),
+  possibleCrime: z.boolean(),
+  timeline: z.array(z.object({ when: z.string(), what: z.string() })),
+  people: z.array(z.object({ role: z.string(), description: z.string() })),
+  location: z.string(),
+  losses: z.array(z.string()),
+  evidence: z.array(z.string()),
+  missingInfo: z.array(z.string()),
+  searchPhrases: z.array(z.string()),
+  urgent: z.boolean(),
+  urgentReason: z.string(),
 });
 
-export const generateBailApplication = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown): BailInput => validate(bailSchema, data))
-  .handler(async (ctx) => {
-    const { language, ...fields } = ctx.data;
-    const langInstruction = language === "ur"
-      ? "Generate the bail application in URDU ONLY."
-      : "Generate the bail application in ENGLISH ONLY.";
-    return complete([
-      { role: "system", content: BAIL_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `${langInstruction}\nToday's date: ${todayInPakistan()}\n\nDetails:\n${formatDetails(fields)}`,
+export type SituationFacts = z.infer<typeof factsSchema>;
+
+// Same structure as factsSchema, in the JSON Schema form the model is constrained to.
+const str = { type: "string" };
+const strList = { type: "array", items: str };
+const FACTS_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: Object.keys(factsSchema.shape),
+  properties: {
+    language: { type: "string", enum: ["en", "ur"] },
+    summary: str,
+    category: { type: "string", enum: SITUATION_CATEGORIES },
+    possibleCrime: { type: "boolean" },
+    timeline: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["when", "what"],
+        properties: { when: str, what: str },
       },
-    ]);
+    },
+    people: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["role", "description"],
+        properties: { role: str, description: str },
+      },
+    },
+    location: str,
+    losses: strList,
+    evidence: strList,
+    missingInfo: strList,
+    searchPhrases: strList,
+    urgent: { type: "boolean" },
+    urgentReason: str,
+  },
+};
+
+const EXTRACTION_PROMPT = `You read a person's own description of a legal problem in Pakistan and extract the facts. You do not give advice here.
+
+Rules:
+- Use only what the person wrote. Never invent names, dates, amounts, places or events. Use "" or [] when something is not stated.
+- language: "ur" if the description is mainly in Urdu (Urdu script or Roman Urdu), otherwise "en".
+- Write summary, timeline, people, location, losses, evidence, missingInfo and urgentReason in the SAME language as the description.
+- summary: 2-3 neutral sentences describing what happened.
+- timeline: the events in order; "when" is the date/time exactly as stated, or "".
+- people: everyone involved, with their role (e.g. victim, accused, witness, landlord, employer, police).
+- losses: money, property or injuries mentioned. evidence: proof the person says they have.
+- missingInfo: up to 5 important facts a lawyer would need that are missing, as short questions to the person.
+- searchPhrases: 1 to 4 short ENGLISH phrases, one per legal issue, in plain words (e.g. "theft from a house at night", "police refusing to register a complaint"). No law names, no section numbers.
+- possibleCrime: true if the situation may involve a criminal offence.
+- urgent: true if someone is in danger or in custody, or a legal deadline is very close; urgentReason says why, otherwise "".`;
+
+const SITUATION_PROMPT = `You are PakLegal AI. A person in Pakistan has described their situation. You are given the FACTS extracted from their description and the LEGAL CONTEXT retrieved for it. Explain their legal position in plain, calm language.
+
+${CITATION_RULES}
+
+Write these sections as Markdown "##" headings:
+## What the law says
+Which provisions in the LEGAL CONTEXT apply to these facts, and why, with citations. Say "may apply" where facts are unclear.
+## Your rights
+The rights that matter in this situation.
+## What you can do next
+Numbered, practical steps in a sensible order.
+## Before you see a lawyer
+The evidence and documents to gather, and questions to ask.
+
+- Write everything in the language of the FACTS ("language"). For Urdu, use the headings "قانون کیا کہتا ہے", "آپ کے حقوق", "اب آپ کیا کر سکتے ہیں" and "وکیل سے ملنے سے پہلے", and keep provision numbers as written, e.g. "دفعہ 380، تعزیراتِ پاکستان".
+- If "urgent" is true, start with one short line on what to do immediately.
+- Keep it under about 450 words. Do not repeat the facts back at length.
+- Never invent facts. This is legal information, not legal advice; end by suggesting a qualified lawyer.`;
+
+async function extractFacts(narrative: string): Promise<SituationFacts> {
+  const { text } = await complete(
+    [
+      { role: "system", content: `${EXTRACTION_PROMPT}\n\nToday's date: ${todayInPakistan()}` },
+      { role: "user", content: narrative },
+    ],
+    {
+      jsonSchema: { name: "situation_facts", schema: FACTS_JSON_SCHEMA },
+      reasoningEffort: "low",
+      // Same description -> same facts and search phrases -> same retrieval.
+      temperature: 0,
+      maxTokens: 2000,
+    },
+  );
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = null;
+  }
+  const result = factsSchema.safeParse(parsed);
+  if (!result.success) {
+    console.error("Fact extraction returned invalid JSON:", text.slice(0, 500));
+    throw new Error(
+      "Could not understand the description. Please add a little more detail and try again.",
+    );
+  }
+  const facts = result.data;
+  return {
+    ...facts,
+    missingInfo: facts.missingInfo.slice(0, 5),
+    searchPhrases: facts.searchPhrases.slice(0, 4),
+  };
+}
+
+export type SituationAnalysis = GroundedAnswer & { facts: SituationFacts };
+
+export const analyzeSituation = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown): { narrative: string } =>
+    validate(
+      z.object({
+        narrative: field(4000, "Please describe what happened.").min(
+          40,
+          "Please describe what happened in a little more detail (at least 40 characters).",
+        ),
+      }),
+      data,
+    ),
+  )
+  .handler(async (ctx): Promise<SituationAnalysis> => {
+    const { narrative } = ctx.data;
+    const facts = await extractFacts(narrative);
+
+    const retrieval = await retrieveLegalSources(
+      facts.searchPhrases.length ? facts.searchPhrases : [facts.summary],
+      { referenceText: narrative, maxSources: 5, maxContextChars: 5000 },
+    );
+    const context = buildContextBlock(retrieval);
+    logRetrieval("situation", retrieval, context.length);
+
+    // The facts (not the raw narrative) go to the model, which keeps the request small.
+    const { searchPhrases: _phrases, ...factsForModel } = facts;
+    const answer = await groundedComplete(
+      [
+        { role: "system", content: `${SITUATION_PROMPT}\n\nToday's date: ${todayInPakistan()}` },
+        {
+          role: "user",
+          content: `FACTS:\n${JSON.stringify(factsForModel, null, 1)}\n\n${context}`,
+        },
+      ],
+      retrieval,
+    );
+    return { ...answer, facts };
   });
 
-// ── Consumer Complaint ───────────────────────────────────────────────────────
+// ── Search the Law ───────────────────────────────────────────────────────────
+// Retrieval only, no AI generation: finds the provisions closest in meaning to the query.
 
-const COMPLAINT_SYSTEM_PROMPT = `You are a Pakistani consumer rights expert. Generate a formal complaint letter to the relevant Pakistani regulatory authority.
+const LAW_IDS = LAWS.map((l) => l.id) as [LawId, ...LawId[]];
 
-The complaint must include:
-- Proper heading with authority name and address
-- Complainant details
-- Respondent/company details
-- Chronological facts
-- Legal basis (Consumer Protection Act, relevant provincial ordinance, PTA rules, NEPRA regulations, etc.)
-- Specific relief/remedy requested
-- Attachments list
-- Complainant signature block
-
-Identify the correct authority based on the complaint type:
-- Telecom: PTA (Pakistan Telecommunication Authority)
-- Electricity: NEPRA / relevant DISCO
-- Gas: OGRA
-- Banking/Finance: SBP Banking Mohtasib or SECP
-- Insurance: SECP Insurance Division
-- General Consumer: Provincial Consumer Protection Courts
-- Online Fraud/Cybercrime: FIA Cybercrime Wing (now NCCIA, the National Cyber Crime Investigation Agency)
-- Government Departments (NADRA, passport, etc.): Wafaqi Mohtasib (Federal Ombudsman), the relevant Provincial Ombudsman, or the Pakistan Citizen's Portal
-
-Output in the requested language only. Cite only Pakistani law, never Indian statutes.
-
-${FACTS_RULE}`;
-
-export type ComplaintInput = {
-  complaintType: string;
-  complainantName: string;
-  complainantCnic?: string;
-  complainantAddress: string;
-  complainantPhone: string;
-  respondentName: string;
-  incidentDate: string;
-  description: string;
-  amountInvolved?: string;
-  reliefSought: string;
-  language: "en" | "ur";
-};
-
-const complaintSchema = z.object({
-  complaintType: z.enum(
-    ["electricity", "telecom", "banking", "consumer", "cybercrime", "government", "other"],
-    { errorMap: () => ({ message: "Please select a complaint type." }) },
-  ),
-  complainantName: required(SHORT_FIELD, "Please provide your name."),
-  complainantCnic: optional(SHORT_FIELD),
-  complainantAddress: required(SHORT_FIELD, "Please provide your address."),
-  complainantPhone: required(SHORT_FIELD, "Please provide your phone number."),
-  respondentName: required(SHORT_FIELD, "Please provide the company or department name."),
-  incidentDate: required(SHORT_FIELD, "Please provide the incident date."),
-  description: required(LONG_FIELD, "Please describe the complaint."),
-  amountInvolved: optional(SHORT_FIELD),
-  reliefSought: required(SHORT_FIELD, "Please describe the relief you want."),
-  language: outputLanguage,
-});
-
-export const generateConsumerComplaint = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown): ComplaintInput => validate(complaintSchema, data))
-  .handler(async (ctx) => {
-    const { language, ...fields } = ctx.data;
-    const langInstruction = language === "ur"
-      ? "Generate the complaint letter in URDU ONLY."
-      : "Generate the complaint letter in ENGLISH ONLY.";
-    return complete([
-      { role: "system", content: COMPLAINT_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `${langInstruction}\nToday's date: ${todayInPakistan()}\n\nComplaint Details:\n${formatDetails(fields)}`,
-      },
-    ]);
+export const searchLaw = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown): { query: string; law?: LawId } =>
+    validate(
+      z.object({
+        query: required(300, "Please type something to search."),
+        law: z.enum(LAW_IDS, { errorMap: () => ({ message: "Unknown law." }) }).optional(),
+      }),
+      data,
+    ),
+  )
+  .handler(async (ctx): Promise<RetrievalResult> => {
+    const { query, law } = ctx.data;
+    const result = await retrieveLegalSources(query, {
+      laws: law ? [law] : undefined,
+      maxSources: 10,
+      maxContextChars: Number.POSITIVE_INFINITY,
+      maxGapFromBest: null,
+    });
+    console.log(
+      `Search "${query.slice(0, 60)}": ${result.status}, ${result.sources.length} results`,
+    );
+    return result;
   });

@@ -1,166 +1,186 @@
 # PakLegal AI
 
-**Free AI-powered legal assistance for Pakistani citizens — in Urdu and English.**
+**Understand your legal situation before you see a lawyer.** Describe what happened in Urdu or English, or upload a legal document, and get a plain-language explanation grounded in the official text of Pakistani law, with the exact Articles and Sections it used.
 
-PakLegal AI helps ordinary people understand court documents, draft FIRs, know their constitutional rights, and access the legal system without needing to hire a lawyer for every question.
-
----
-
-## Features
-
-| Tool | Description |
-|------|-------------|
-| 💬 **Legal Chat** | Ask any question about Pakistani law in plain Urdu or English. Answers are grounded in the official text of Pakistani laws, with the Articles/Sections used shown under each answer |
-| 📄 **Court Order Translator** | Upload an FIR, summons, or court order — get a plain-language summary |
-| 📝 **FIR Drafting Assistant** | Describe what happened, get a correctly formatted FIR citing PPC & CrPC |
-| ⚖️ **Bail Application** | Generate a complete bail application with legal grounds and case law |
-| 📬 **Legal Notice Generator** | Draft formal notices for rent disputes, wrongful termination, bounced cheques |
-| 🚨 **Consumer Complaint** | File complaints against utilities, banks, telecom companies, and government departments |
-| 🛡️ **Know Your Rights** | Browse 22+ rights under the Constitution of Pakistan 1973, searchable by category |
+**Live demo:** https://paklegal-ai.mahnoorawan203.workers.dev
 
 ---
 
-## Tech Stack
+## The problem
 
-- **Framework:** [TanStack Start](https://tanstack.com/start) (React + SSR)
-- **Deployment:** Cloudflare Workers (edge)
-- **AI:** [Groq](https://console.groq.com/) API — `openai/gpt-oss-120b` (override with `GROQ_MODEL`)
-- **Legal knowledge base (RAG):** Cloudflare Workers AI embeddings (`@cf/baai/bge-m3`, multilingual incl. Urdu) + Cloudflare Vectorize
-- **Styling:** Tailwind CSS v4
-- **Language:** TypeScript
-- **i18n:** Custom Urdu/English context with RTL support
+Two everyday situations send people to a lawyer before they understand anything themselves:
+
+1. **"Let me tell you what happened."** People explain an incident out loud while the lawyer takes notes. They don't know which laws apply, what their rights are, or what details matter.
+2. **"What does this notice even say?"** People pay a lawyer just to read a legal notice, summons or court order to them in plain words.
+
+## What PakLegal AI does
+
+| Problem | Feature | What it does |
+|---|---|---|
+| 1 | **Explain My Situation** (main feature) | The person writes or speaks the incident in their own words. The system extracts the facts into a structured record, retrieves the provisions that apply, explains the law, their rights and next steps, and produces a **case summary to hand to their lawyer** (plus an FIR application to the SHO when it is a possible crime). Follow-up questions are answered in the same context. |
+| 2 | **Document Explainer** | Upload a PDF or a phone photo. Get a plain Urdu/English summary, deadlines, obligations and risks, and the provisions the document cites explained from their official text. |
+| Both | **Search the Law** | Semantic search over the official text, in Urdu or English, with no AI writing: every result is the law itself. |
+
+A floating chat is also available on every page for quick questions, grounded the same way.
 
 ---
 
-## Getting Started
+## How it works
 
-### Prerequisites
+```mermaid
+flowchart LR
+  A[Description or document<br/>Urdu / English, text / voice / PDF / photo] --> B[1. Understand<br/>structured fact extraction<br/>JSON schema]
+  B --> C[2. Retrieve<br/>named-provision lookup +<br/>vector search per legal issue]
+  C --> D[3. Explain<br/>Groq LLM with numbered<br/>LEGAL CONTEXT]
+  D --> E[4. Verify<br/>citation check against<br/>retrieved sources]
+  E --> F[Answer + sources<br/>+ lawyer case summary]
+  K[(Vectorize index<br/>1,532 chunks of<br/>4 official laws)] --> C
+```
 
-- Node.js 18+
-- A free [Groq API key](https://console.groq.com/keys)
-- A free Cloudflare account, logged in with `npx wrangler login` (for the legal knowledge base)
+1. **Understand.** The model turns the free-text description into a validated JSON record (Groq structured outputs + zod): summary, timeline, people, losses, evidence, missing details, and one plain-English search phrase per legal issue.
+2. **Retrieve.** Provisions the person names ("Section 489-F PPC", "دفعہ 302") are fetched directly by ID. Each legal issue is embedded with a multilingual model (`bge-m3`) and searched in Cloudflare Vectorize; results are interleaved so every issue gets its best provisions, weak matches are dropped (similarity below 0.5, or more than 0.1 below the best), and the total is capped to fit the free-tier token budget.
+3. **Explain.** The LLM gets the facts and the numbered provisions, with rules: cite as `[1]`, never cite anything not in the context, and say so when the sources do not cover the situation.
+4. **Verify.** Every Section/Article in the answer is checked against the retrieved sources and the catalogue of real provisions. Anything unsupported or non-existent is shown to the user as "please verify".
 
-### Installation
+The **case summary** and **FIR application** are assembled by plain code from the validated facts and retrieved sources, not generated by the model, so they cannot contain invented facts or sections.
+
+### Knowledge base
+
+| Law | Provisions | Source |
+|---|---|---|
+| Constitution of Pakistan, 1973 | 309 Articles | Pakistan Code (official PDF) |
+| Pakistan Penal Code, 1860 | 604 Sections | Pakistan Code |
+| Code of Criminal Procedure, 1898 | 472 Sections | Pakistan Code |
+| Prevention of Electronic Crimes Act, 2016 (incl. 2025 amendments) | 80 Sections | Pakistan Code |
+
+`scripts/rag/build-knowledge.mjs` downloads each PDF, strips page headers, amendment footnotes and markers, uses the table of contents to split the body into one chunk per provision (long ones into parts), and records law, number, title, source URL and text. 1,465 of 1,505 listed provisions (97%) are matched; the rest stay attached to the neighbouring provision.
+
+---
+
+## Evaluation
+
+`npm run rag:eval` runs 40 legal questions (28 English, 12 Urdu) and 5 off-topic questions from [`knowledge/eval/questions.json`](knowledge/eval/questions.json) against the live index. Full results: [`knowledge/eval/results.md`](knowledge/eval/results.md).
+
+| Metric | With glossary | Without glossary |
+|---|---|---|
+| Hit@1 (correct provision ranked first) | 63% | 53% |
+| Hit@3 | 80% | 68% |
+| Hit@5 (correct provision sent to the model) | 88% | 78% |
+| MRR | 0.72 | 0.61 |
+| Hit@3, Urdu questions | 83% | 58% |
+| Off-topic questions correctly rejected | 100% | 100% |
+
+- The small **glossary** that adds statutory wording to everyday terms ("FIR" → "information in cognizable cases") adds 10 points at Hit@1 and 25 points for Urdu questions.
+- Most misses are structural: the PPC defines an offence and punishes it in **separate neighbouring sections** (300/302 qatl-i-amd, 405/406 criminal breach of trust, 441/448 trespass, 415/420 cheating), and retrieval often ranks the definition first. Linking definition and punishment sections is the next improvement.
+- The glossary was written before this test set and was not tuned on it.
+
+---
+
+## Design decisions
+
+- **Two focused features instead of seven.** Earlier versions also generated bail applications, legal notices and consumer complaints. They were removed: they repeated one skill (form → prompt → document), and the model invented case law and authority addresses that the knowledge base could not ground.
+- **Generated documents are templates, not LLM output.** A citizen does not write the FIR (the police record it under s.154 CrPC); they submit an application to the SHO, which is built from their own words.
+- **Cloudflare Vectorize + Workers AI.** The app already runs on Cloudflare Workers, so retrieval needs no extra service or API key. The laws (1.3M characters) are too large to bundle into a Worker.
+- **Thresholds from data.** On test questions, relevant provisions scored 0.53-0.77 and off-topic questions at most 0.43, so the cut-off is 0.5.
+- **Token budget.** Groq's free tier allows 8,000 tokens/minute, which limits context to about 5 provisions and shapes the fact-extraction step (low reasoning effort, and the facts rather than the raw narrative go to the second call).
+- **Photos:** the free vision model allows only about 1,000 output tokens/minute, so it only transcribes; the main model does the analysis.
+
+## Limitations
+
+- Covers four laws. Family, tenancy, labour and consumer law are not loaded yet, and the app says so instead of guessing.
+- The model can still misapply a provision; the citation check catches invented or unretrieved numbers, not wrong reasoning. Everything is legal information, not legal advice.
+- Free-tier rate limits: heavy simultaneous use returns "try again in a minute".
+
+---
+
+## Tech stack
+
+- **App:** [TanStack Start](https://tanstack.com/start) (React 19 + SSR), TypeScript, Tailwind CSS v4, Urdu/English with RTL
+- **Hosting:** Cloudflare Workers
+- **LLM:** [Groq](https://console.groq.com/) running `openai/gpt-oss-120b` (vision: `qwen/qwen3.8-27b`)
+- **RAG:** Cloudflare Workers AI embeddings (`@cf/baai/bge-m3`, multilingual) + Cloudflare Vectorize
+- **Documents:** `unpdf` for PDF text; browser speech recognition for voice input
+- **Quality:** zod validation, vitest unit tests, GitHub Actions CI (type-check, lint, tests, build)
+
+---
+
+## Getting started
+
+Prerequisites: Node.js 22+, a free [Groq API key](https://console.groq.com/keys), and a free Cloudflare account.
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/paklegal-ai.git
+git clone https://github.com/maan203/paklegal-ai.git
 cd paklegal-ai
 npm install
+echo "GROQ_API_KEY=your_groq_api_key" > .env.local
+npx wrangler login
 ```
 
-### Environment Variables
-
-Create a `.env.local` file in the root:
-
-```env
-GROQ_API_KEY=your_groq_api_key_here
-# Optional: use a different Groq model
-# GROQ_MODEL=openai/gpt-oss-120b
-```
-
-### Run Locally
+Build the legal knowledge base in your Cloudflare account (once):
 
 ```bash
-npm run dev
+npm run rag:index     # create the "paklegal-laws" Vectorize index
+npm run rag:ingest    # embed and upload knowledge/chunks/*.json
+npm run rag:eval      # optional: measure retrieval quality
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
-
-The Legal Chat searches the knowledge base in your Cloudflare account, so run `npx wrangler login` first.
-To run without Cloudflare (the chat then answers without legal sources), use `RAG_OFFLINE=1 npm run dev`.
-
-### Build for Production
+Run and check:
 
 ```bash
-npm run build
+npm run dev           # http://localhost:3000 (RAG_OFFLINE=1 npm run dev runs without Cloudflare)
+npm test              # unit tests
+npm run typecheck && npm run lint
 ```
 
-### Deploy to Cloudflare Workers
-
-Set the API key as a Worker secret once (`.env.local` is not deployed):
+Deploy (set the key as a Worker secret once):
 
 ```bash
 npx wrangler secret put GROQ_API_KEY
-```
-
-Then deploy:
-
-```bash
 npm run deploy
 ```
 
----
+### Adding a law
 
-## Legal Knowledge Base (RAG)
-
-The Legal Chat uses Retrieval-Augmented Generation: before Groq answers, the app finds the relevant provisions in the official text of Pakistani laws and gives them to the model as context.
-
-**Laws included** (official PDFs from [Pakistan Code](https://pakistancode.gov.pk)): Constitution of Pakistan 1973, Pakistan Penal Code 1860, Code of Criminal Procedure 1898, Prevention of Electronic Crimes Act 2016. About 1,500 Articles/Sections in total.
-
-**How an answer is produced**
-
-1. **Direct lookup:** provisions named in the question ("Section 489-F PPC", "دفعہ 302", "Article 10A") are fetched by ID.
-2. **Meaning search:** the question (plus glossary terms, e.g. "FIR" → "information in cognizable cases") is embedded with `bge-m3` and the closest provisions are found in Vectorize. Weak matches are dropped (similarity below 0.5, or more than 0.1 below the best match).
-3. **Context:** up to 5 provisions (about 7,000 characters) are sent to Groq with rules: use them as the primary source, cite them as `[1]`, `[2]`, never invent laws or sections, and say so when the sources are not enough.
-4. **Answer:** "What the law says" (with citations) and "In simple words", in the language of the question.
-5. **Citation check:** any Section/Article in the answer that was not among the retrieved sources is listed under the answer as "please verify".
-
-The sources used are shown under every chat answer, with the official text and a link to Pakistan Code.
-
-**Setup (once per Cloudflare account)**
-
-```bash
-npx wrangler login
-npm run rag:index     # create the "paklegal-laws" Vectorize index
-npm run rag:ingest    # embed and upload knowledge/chunks/*.json
-```
-
-**Adding a law**
-
-1. Add an entry to `src/lib/rag/laws.ts` (name, PDF URL from Pakistan Code, English/Urdu names).
-2. `npm run rag:build -- <law-id>` downloads the PDF and splits it into provisions (`knowledge/chunks/<law-id>.json`).
-3. `npm run rag:ingest -- <law-id>` uploads it. No code changes are needed.
+1. Add an entry to `src/lib/rag/laws.ts` (name, Pakistan Code PDF URL, English/Urdu names).
+2. `npm run rag:build -- <law-id>` builds `knowledge/chunks/<law-id>.json`.
+3. `npm run rag:ingest -- <law-id>` uploads it. No other code changes are needed.
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
 src/
-├── routes/           # Page components (TanStack file-based routing)
-│   ├── index.tsx     # Home page
-│   ├── chat.tsx      # Full-page Legal Chat
-│   ├── translator.tsx
-│   ├── fir.tsx
-│   ├── bail.tsx
-│   ├── notice.tsx
-│   ├── complaint.tsx
-│   └── rights.tsx
+├── routes/
+│   ├── index.tsx           # Home: the two problems and how it works
+│   ├── situation.tsx       # Explain My Situation
+│   ├── translator.tsx      # Document Explainer
+│   └── law.tsx             # Search the Law
 ├── components/
-│   ├── ChatWidget.tsx      # Floating chat bubble (all pages except /chat)
-│   ├── LegalSources.tsx    # Sources list shown under chat answers
-│   ├── SiteHeader.tsx
-│   ├── PageShell.tsx
-│   ├── DocumentResult.tsx  # Generated document with Copy / Print / Reset
-│   └── MarkdownResult.tsx
+│   ├── LegalSources.tsx    # Cited / unused sources + citation warnings
+│   ├── ChatThread.tsx      # Chat messages with sources (bubble + follow-ups)
+│   ├── ChatWidget.tsx      # Floating quick-question chat
+│   └── DocumentResult.tsx  # Copy / print for generated documents
 ├── lib/
-│   ├── ai-functions.ts     # Server functions: Groq API calls + input validation
-│   ├── rag/                # Legal knowledge base: laws registry, retrieval, citations
-│   ├── document-actions.ts # Copy and print helpers
-│   └── i18n.tsx            # Urdu/English language context
-└── hooks/
-    └── useLocalStorage.ts
-knowledge/chunks/           # Law text split into Articles/Sections (built from official PDFs)
-scripts/rag/                # build-knowledge.mjs, ingest.mjs
+│   ├── ai-functions.ts     # Server functions: extraction, grounded answers, search
+│   ├── case-summary.ts     # Lawyer case summary + FIR application (templates)
+│   └── rag/
+│       ├── laws.ts         # Law registry (add laws here)
+│       ├── retrieve.ts     # Direct lookup + vector search + cut-offs
+│       ├── references.ts   # Finds "Section 489-F PPC" / "دفعہ 302" in text
+│       ├── context.ts      # Context block, citation rules, citation check
+│       └── glossary.ts     # Everyday terms -> statutory wording
+└── hooks/                  # useLegalChat, useSpeechInput, useLocalStorage
+scripts/rag/                # build-knowledge, ingest, eval
+knowledge/                  # law chunks + evaluation set and results
+tests/                      # vitest unit tests
 ```
 
 ---
 
-## AI Disclaimer
+## Disclaimer
 
-PakLegal AI provides **general legal information only** — not legal advice. It is not a substitute for a qualified lawyer. Always consult a licensed advocate for your specific case.
-
----
+PakLegal AI provides **general legal information, not legal advice**. It is not a substitute for a qualified lawyer.
 
 ## License
 

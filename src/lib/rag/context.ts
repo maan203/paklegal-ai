@@ -7,13 +7,17 @@ import type { LegalSource, RetrievalResult } from "./retrieve";
 
 const COVERED_LAWS = LAWS.map((l) => l.name).join("; ");
 
-export const LEGAL_CONTEXT_RULES = `Every question you receive comes with LEGAL CONTEXT: numbered extracts from the official text of Pakistani laws, retrieved from a knowledge base that currently covers: ${COVERED_LAWS}.
+// Shared by every feature that answers from retrieved law.
+export const CITATION_RULES = `You are given LEGAL CONTEXT: numbered extracts from the official text of Pakistani laws, retrieved from a knowledge base that currently covers: ${COVERED_LAWS}.
 
 How to use it:
 - Treat the LEGAL CONTEXT as your primary source. Base every statement about what the law says on it.
 - Cite provisions exactly as given, followed by the extract number in plain square brackets, e.g. "Section 489-F PPC [1]" or "Article 10A of the Constitution [2]".
 - Never cite an Article, Section, law or court case that is not in the LEGAL CONTEXT, and never invent numbers.
-- If the LEGAL CONTEXT is empty or does not answer the question, say clearly that the available legal sources do not provide enough information on this. You may then give brief general guidance without citing any section numbers, and suggest consulting a lawyer. (Skip this for greetings or non-legal messages.)
+- If the LEGAL CONTEXT is empty or does not cover the matter, say clearly that the available legal sources do not provide enough information on this. You may then give brief general guidance without citing any section numbers, and suggest consulting a lawyer.`;
+
+export const LEGAL_CONTEXT_RULES = `${CITATION_RULES}
+- Skip the "not enough information" statement for greetings or non-legal messages.
 - Keep the law and its explanation separate. For legal questions, use two headings:
   "What the law says": what the cited provisions state, close to their wording, with citations.
   "In simple words": a plain-language explanation and practical next steps.

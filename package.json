@@ -13,7 +13,10 @@
     "format": "prettier --write .",
     "rag:build": "node scripts/rag/build-knowledge.mjs",
     "rag:index": "wrangler vectorize create paklegal-laws --dimensions=1024 --metric=cosine && wrangler vectorize create-metadata-index paklegal-laws --property-name=law --type=string",
-    "rag:ingest": "node scripts/rag/ingest.mjs"
+    "rag:ingest": "node scripts/rag/ingest.mjs",
+    "rag:eval": "node scripts/rag/eval.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",
@@ -50,6 +53,7 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^3.2.7"
   }
 }

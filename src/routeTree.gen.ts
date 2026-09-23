@@ -10,12 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TranslatorRouteImport } from './routes/translator'
-import { Route as RightsRouteImport } from './routes/rights'
-import { Route as NoticeRouteImport } from './routes/notice'
-import { Route as FirRouteImport } from './routes/fir'
-import { Route as ComplaintRouteImport } from './routes/complaint'
-import { Route as ChatRouteImport } from './routes/chat'
-import { Route as BailRouteImport } from './routes/bail'
+import { Route as SituationRouteImport } from './routes/situation'
+import { Route as LawRouteImport } from './routes/law'
 import { Route as IndexRouteImport } from './routes/index'
 
 const TranslatorRoute = TranslatorRouteImport.update({
@@ -23,34 +19,14 @@ const TranslatorRoute = TranslatorRouteImport.update({
   path: '/translator',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RightsRoute = RightsRouteImport.update({
-  id: '/rights',
-  path: '/rights',
+const SituationRoute = SituationRouteImport.update({
+  id: '/situation',
+  path: '/situation',
   getParentRoute: () => rootRouteImport,
 } as any)
-const NoticeRoute = NoticeRouteImport.update({
-  id: '/notice',
-  path: '/notice',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FirRoute = FirRouteImport.update({
-  id: '/fir',
-  path: '/fir',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ComplaintRoute = ComplaintRouteImport.update({
-  id: '/complaint',
-  path: '/complaint',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ChatRoute = ChatRouteImport.update({
-  id: '/chat',
-  path: '/chat',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BailRoute = BailRouteImport.update({
-  id: '/bail',
-  path: '/bail',
+const LawRoute = LawRouteImport.update({
+  id: '/law',
+  path: '/law',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -61,76 +37,35 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/bail': typeof BailRoute
-  '/chat': typeof ChatRoute
-  '/complaint': typeof ComplaintRoute
-  '/fir': typeof FirRoute
-  '/notice': typeof NoticeRoute
-  '/rights': typeof RightsRoute
+  '/law': typeof LawRoute
+  '/situation': typeof SituationRoute
   '/translator': typeof TranslatorRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/bail': typeof BailRoute
-  '/chat': typeof ChatRoute
-  '/complaint': typeof ComplaintRoute
-  '/fir': typeof FirRoute
-  '/notice': typeof NoticeRoute
-  '/rights': typeof RightsRoute
+  '/law': typeof LawRoute
+  '/situation': typeof SituationRoute
   '/translator': typeof TranslatorRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/bail': typeof BailRoute
-  '/chat': typeof ChatRoute
-  '/complaint': typeof ComplaintRoute
-  '/fir': typeof FirRoute
-  '/notice': typeof NoticeRoute
-  '/rights': typeof RightsRoute
+  '/law': typeof LawRoute
+  '/situation': typeof SituationRoute
   '/translator': typeof TranslatorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/bail'
-    | '/chat'
-    | '/complaint'
-    | '/fir'
-    | '/notice'
-    | '/rights'
-    | '/translator'
+  fullPaths: '/' | '/law' | '/situation' | '/translator'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/bail'
-    | '/chat'
-    | '/complaint'
-    | '/fir'
-    | '/notice'
-    | '/rights'
-    | '/translator'
-  id:
-    | '__root__'
-    | '/'
-    | '/bail'
-    | '/chat'
-    | '/complaint'
-    | '/fir'
-    | '/notice'
-    | '/rights'
-    | '/translator'
+  to: '/' | '/law' | '/situation' | '/translator'
+  id: '__root__' | '/' | '/law' | '/situation' | '/translator'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  BailRoute: typeof BailRoute
-  ChatRoute: typeof ChatRoute
-  ComplaintRoute: typeof ComplaintRoute
-  FirRoute: typeof FirRoute
-  NoticeRoute: typeof NoticeRoute
-  RightsRoute: typeof RightsRoute
+  LawRoute: typeof LawRoute
+  SituationRoute: typeof SituationRoute
   TranslatorRoute: typeof TranslatorRoute
 }
 
@@ -143,46 +78,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TranslatorRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/rights': {
-      id: '/rights'
-      path: '/rights'
-      fullPath: '/rights'
-      preLoaderRoute: typeof RightsRouteImport
+    '/situation': {
+      id: '/situation'
+      path: '/situation'
+      fullPath: '/situation'
+      preLoaderRoute: typeof SituationRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/notice': {
-      id: '/notice'
-      path: '/notice'
-      fullPath: '/notice'
-      preLoaderRoute: typeof NoticeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/fir': {
-      id: '/fir'
-      path: '/fir'
-      fullPath: '/fir'
-      preLoaderRoute: typeof FirRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/complaint': {
-      id: '/complaint'
-      path: '/complaint'
-      fullPath: '/complaint'
-      preLoaderRoute: typeof ComplaintRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/chat': {
-      id: '/chat'
-      path: '/chat'
-      fullPath: '/chat'
-      preLoaderRoute: typeof ChatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/bail': {
-      id: '/bail'
-      path: '/bail'
-      fullPath: '/bail'
-      preLoaderRoute: typeof BailRouteImport
+    '/law': {
+      id: '/law'
+      path: '/law'
+      fullPath: '/law'
+      preLoaderRoute: typeof LawRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -197,12 +104,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  BailRoute: BailRoute,
-  ChatRoute: ChatRoute,
-  ComplaintRoute: ComplaintRoute,
-  FirRoute: FirRoute,
-  NoticeRoute: NoticeRoute,
-  RightsRoute: RightsRoute,
+  LawRoute: LawRoute,
+  SituationRoute: SituationRoute,
   TranslatorRoute: TranslatorRoute,
 }
 export const routeTree = rootRouteImport

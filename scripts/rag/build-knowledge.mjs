@@ -18,6 +18,7 @@ const ROOT = path.resolve(import.meta.dirname, "../..");
 const RAW_DIR = path.join(ROOT, "knowledge/raw");
 const CHUNK_DIR = path.join(ROOT, "knowledge/chunks");
 const CATALOG_FILE = path.join(ROOT, "src/lib/rag/catalog.json");
+const STATS_FILE = path.join(ROOT, "src/lib/rag/stats.json");
 
 // Chunks longer than this are split into parts at paragraph boundaries.
 const MAX_CHUNK_CHARS = 3000;
@@ -231,7 +232,20 @@ function writeCatalog() {
     catalog[law.id] = entries;
   }
   fs.writeFileSync(CATALOG_FILE, JSON.stringify(catalog));
-  console.log(`\nCatalog written: ${path.relative(ROOT, CATALOG_FILE)}`);
+  // Small counts file for the UI, so pages don't need to load the whole catalog.
+  const laws = Object.values(catalog);
+  const stats = {
+    laws: laws.length,
+    provisions: laws.reduce((n, law) => n + Object.keys(law).length, 0),
+    chunks: laws.reduce(
+      (n, law) => n + Object.values(law).reduce((m, p) => m + p.ids.length, 0),
+      0,
+    ),
+  };
+  fs.writeFileSync(STATS_FILE, `${JSON.stringify(stats, null, 2)}\n`);
+  console.log(
+    `\nCatalog written: ${path.relative(ROOT, CATALOG_FILE)} (${stats.provisions} provisions, ${stats.chunks} chunks)`,
+  );
 }
 
 const only = process.argv.slice(2);
