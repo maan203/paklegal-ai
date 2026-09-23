@@ -1,0 +1,119 @@
+{
+  "description": "Explanation test set for Describe Your Incident. 'issues' lists, for each legal issue in the incident, the provisions a correct answer should cite (any one per issue counts). 'nextStep' is a pattern the practical advice should contain. 'outOfScope' incidents are about law not in the knowledge base: a correct answer says the available sources do not cover it.",
+  "incidents": [
+    {
+      "id": "robbery-fir-refused",
+      "lang": "en",
+      "narrative": "Last Tuesday around 11 at night two men on a motorcycle stopped me outside my shop in Saddar, Rawalpindi. One of them showed a pistol and they took my phone and 35,000 rupees cash. My neighbour Aslam saw it happen. The next morning the duty officer at the police station refused to write my complaint.",
+      "issues": [["ppc-392", "ppc-397", "ppc-398"], ["crpc-154", "crpc-22a"]],
+      "nextStep": "police|FIR|SHO|Justice of (the )?Peace"
+    },
+    {
+      "id": "bounced-cheque",
+      "lang": "en",
+      "narrative": "I lent 3 lakh rupees to a business partner in January. In June he gave me a cheque for the full amount but the bank returned it saying insufficient funds. Now he is not answering my calls. I still have the returned cheque and the bank's memo.",
+      "issues": [["ppc-489f"]],
+      "nextStep": "police|FIR|complaint|notice"
+    },
+    {
+      "id": "house-theft-night",
+      "lang": "en",
+      "narrative": "Two nights ago someone broke the lock of our back door while we were asleep and stole my wife's gold jewellery and a laptop from the bedroom. We live in Gulshan-e-Iqbal, Karachi. We found the broken lock in the morning.",
+      "issues": [["ppc-380", "ppc-457", "ppc-379"]],
+      "nextStep": "police|FIR"
+    },
+    {
+      "id": "online-defamation",
+      "lang": "en",
+      "narrative": "A former colleague created a fake Facebook page in my name and is posting false claims that I took bribes at work. Several people in my office have seen it and my reputation is being damaged. I have screenshots of the posts.",
+      "issues": [["peca-20"]],
+      "nextStep": "NCCIA|FIA|cyber|complaint"
+    },
+    {
+      "id": "account-hacked",
+      "lang": "en",
+      "narrative": "Someone got into my email account without my permission, changed the password, and is sending messages to my contacts asking for money. I did not share my password with anyone.",
+      "issues": [["peca-3", "peca-4", "peca-16"]],
+      "nextStep": "NCCIA|FIA|cyber|complaint|report"
+    },
+    {
+      "id": "cyberstalking",
+      "lang": "en",
+      "narrative": "A man I refused to marry keeps messaging me on WhatsApp and Instagram every day from new numbers and accounts, even though I have blocked him many times. He comments on where I have been and it scares me.",
+      "issues": [["peca-24", "peca-21", "ppc-509"]],
+      "nextStep": "NCCIA|FIA|cyber|complaint|police"
+    },
+    {
+      "id": "detained-three-days",
+      "lang": "en",
+      "narrative": "My brother was picked up by the police from our house on Monday. It is now Thursday and they have not taken him to any magistrate. They will not tell us what he is charged with and will not let us meet him.",
+      "issues": [["crpc-61", "crpc-167", "constitution-10"]],
+      "nextStep": "magistrate|habeas|court|High Court|lawyer"
+    },
+    {
+      "id": "death-threat",
+      "lang": "en",
+      "narrative": "My neighbour came to my door with two other men after an argument about parking and said he would kill me if I complained about his car again. My wife heard everything.",
+      "issues": [["ppc-506", "ppc-503"]],
+      "nextStep": "police|FIR|complaint"
+    },
+    {
+      "id": "investment-fraud",
+      "lang": "en",
+      "narrative": "A man promised to double my money in six months through a business scheme. I gave him 5 lakh rupees in cash with a written receipt. Now his office is closed and his phone is switched off.",
+      "issues": [["ppc-420", "ppc-415"]],
+      "nextStep": "police|FIR|complaint"
+    },
+    {
+      "id": "partner-misappropriation",
+      "lang": "en",
+      "narrative": "I gave my business partner 10 lakh rupees to buy stock for our shop. He never bought the stock and has used the money for himself. He admits he has the money but refuses to return it.",
+      "issues": [["ppc-406", "ppc-405"]],
+      "nextStep": "police|FIR|complaint|suit|court"
+    },
+    {
+      "id": "khula-maintenance",
+      "lang": "en",
+      "outOfScope": true,
+      "narrative": "My husband left me and our two children a year ago and gives no money for their expenses. I want a divorce (khula) and maintenance for the children. What are my options?",
+      "issues": [],
+      "nextStep": "family court|lawyer"
+    },
+    {
+      "id": "ur-motorbike-theft",
+      "lang": "ur",
+      "narrative": "کل شام میری موٹر سائیکل بازار میں دکان کے سامنے سے چوری ہو گئی۔ میں نے اسے تالا لگایا ہوا تھا۔ میرے پاس رجسٹریشن کے کاغذات موجود ہیں اور دکان پر سی سی ٹی وی کیمرہ لگا ہوا ہے۔",
+      "issues": [["ppc-379", "ppc-381a"]],
+      "nextStep": "پولیس|ایف آئی آر|تھانہ|FIR"
+    },
+    {
+      "id": "ur-death-threat",
+      "lang": "ur",
+      "narrative": "میرے چچا زاد نے زمین کے جھگڑے پر مجھے فون پر جان سے مارنے کی دھمکی دی ہے۔ اس کی آواز کی ریکارڈنگ میرے پاس ہے۔ مجھے اپنی اور اپنے بچوں کی جان کا خطرہ ہے۔",
+      "issues": [["ppc-506", "ppc-503"]],
+      "nextStep": "پولیس|ایف آئی آر|تھانہ|FIR"
+    },
+    {
+      "id": "ur-cheque",
+      "lang": "ur",
+      "narrative": "میں نے اپنے دوست کو تین لاکھ روپے ادھار دیے تھے۔ اس نے مجھے چیک دیا لیکن بینک نے چیک واپس کر دیا کیونکہ اکاؤنٹ میں پیسے نہیں تھے۔ اب وہ میرا فون نہیں اٹھاتا۔",
+      "issues": [["ppc-489f"]],
+      "nextStep": "پولیس|ایف آئی آر|تھانہ|نوٹس|FIR"
+    },
+    {
+      "id": "ur-son-arrested-bail",
+      "lang": "ur",
+      "narrative": "میرے بیٹے کو پولیس نے لڑائی کے مقدمے میں گرفتار کر لیا ہے۔ وہ طالب علم ہے اور پہلے کبھی کسی مقدمے میں نہیں رہا۔ ہم اس کی ضمانت کروانا چاہتے ہیں۔",
+      "issues": [["crpc-497", "crpc-496"]],
+      "nextStep": "وکیل|عدالت|مجسٹریٹ|ضمانت"
+    },
+    {
+      "id": "ur-tenancy-deposit",
+      "lang": "ur",
+      "outOfScope": true,
+      "narrative": "میں نے مکان خالی کر دیا ہے لیکن مالک مکان میرا پچاس ہزار روپے کا سیکیورٹی ڈپازٹ واپس نہیں کر رہا۔ کرایہ نامے میں لکھا ہے کہ ڈپازٹ واپس ہوگا۔",
+      "issues": [],
+      "nextStep": "وکیل|عدالت|نوٹس|کرایہ"
+    }
+  ]
+}

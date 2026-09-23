@@ -76,6 +76,23 @@ The **draft complaint for FIR registration** and the **case summary** are assemb
 - Most misses are structural: the PPC defines an offence and punishes it in **separate neighbouring sections** (300/302 qatl-i-amd, 405/406 criminal breach of trust, 441/448 trespass, 415/420 cheating), and retrieval often ranks the definition first. Linking definition and punishment sections is the next improvement.
 - The glossary was written before this test set and was not tuned on it.
 
+### Urdu speech
+
+`npm run speech:eval` transcribes 4 Urdu incident recordings (made with Microsoft's Pakistani Urdu neural voices by [`scripts/speech/make-urdu-audio.py`](scripts/speech/make-urdu-audio.py)) using the app's exact Whisper settings. Full transcripts: [`knowledge/eval/speech-results.md`](knowledge/eval/speech-results.md).
+
+| Setting | Word accuracy | Output script |
+|---|---|---|
+| Language set to Urdu (what the app does) | 92% | Urdu in all 4 |
+| Whisper auto-detect | 25% | Hindi (Devanagari) in 3 of 4 |
+
+- Auto-detect writes Urdu speech in Hindi script, which is why the app sends the language explicitly.
+- The errors that remain are in the words that matter: "FIR" in code-switched speech became "فردرج", and "گاڑی" (car) became "گالی" (abuse). This is why the transcript is shown for correction before analysis.
+- Synthetic voices are clearer than real speech in a noisy room, so these numbers are an upper bound.
+
+### Explanation quality
+
+`npm run rag:eval-answers` runs 16 incidents ([`knowledge/eval/incidents.json`](knowledge/eval/incidents.json): 11 English, 5 Urdu, 2 about law that is not loaded) through the full pipeline and through the same model without retrieval, and checks which answer cites the right provisions, invents sections or Indian law, gives the right next step, and answers in the right language. It needs about 150,000 Groq tokens, most of a free-tier day, so it caches answers and resumes after a rate limit.
+
 ---
 
 ## Design decisions
@@ -93,7 +110,8 @@ The **draft complaint for FIR registration** and the **case summary** are assemb
 
 - Covers four laws. Family, tenancy, labour and consumer law are not loaded yet, and the app says so instead of guessing.
 - The model can still misapply a provision; the citation check catches invented or unretrieved numbers, not wrong reasoning. Everything is legal information, not legal advice.
-- Free-tier rate limits: heavy simultaneous use returns "try again in a minute".
+- Free-tier rate limits: heavy simultaneous use returns "try again in a minute", and Groq's free daily quota (200,000 tokens) covers roughly 20 incident analyses a day on the live demo.
+- Speech was tested with synthetic Urdu voices, not yet with real recordings from different speakers and noisy places.
 
 ---
 
@@ -126,6 +144,8 @@ Build the legal knowledge base in your Cloudflare account (once):
 npm run rag:index     # create the "paklegal-laws" Vectorize index
 npm run rag:ingest    # embed and upload knowledge/chunks/*.json
 npm run rag:eval      # optional: measure retrieval quality
+npm run rag:eval-answers  # optional: explanation quality with vs without RAG (uses ~150K Groq tokens)
+npm run speech:eval   # optional: Urdu speech-to-text accuracy
 ```
 
 Run and check:

@@ -16,7 +16,9 @@
     "rag:ingest": "node scripts/rag/ingest.mjs",
     "rag:eval": "node scripts/rag/eval.mjs",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "rag:eval-answers": "node scripts/rag/eval-answers.mjs",
+    "speech:eval": "node scripts/speech/eval-speech.mjs"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",

@@ -124,6 +124,12 @@ async function complete(
           "This request is too large for the free AI tier. Shorten the text or wait a minute and try again.",
         );
       }
+      // The free tier also has a daily token quota; a minute's wait will not help then.
+      if (err.status === 429 && /per day/i.test(err.message)) {
+        throw new Error(
+          "The free AI quota for today has been used up. Please try again in a few hours.",
+        );
+      }
       if (err.status === 429) {
         throw new Error("The AI service is rate-limited. Please try again in a minute.");
       }
@@ -566,6 +572,33 @@ async function extractFacts(narrative: string): Promise<SituationFacts> {
 
 export type SituationAnalysis = GroundedAnswer & { facts: SituationFacts };
 
+// The full incident pipeline. Not exported: a plain export would pull the server-only RAG code
+// into the client bundle. scripts/rag/eval-answers.mjs exposes it with a Vite transform.
+async function analyzeIncident(narrative: string): Promise<SituationAnalysis> {
+  const facts = await extractFacts(narrative);
+
+  const retrieval = await retrieveLegalSources(
+    facts.searchPhrases.length ? facts.searchPhrases : [facts.summary],
+    { referenceText: narrative, maxSources: 5, maxContextChars: 5000 },
+  );
+  const context = buildContextBlock(retrieval);
+  logRetrieval("situation", retrieval, context.length);
+
+  // The facts (not the raw narrative) go to the model, which keeps the request small.
+  const { searchPhrases: _phrases, ...factsForModel } = facts;
+  const answer = await groundedComplete(
+    [
+      { role: "system", content: `${SITUATION_PROMPT}\n\nToday's date: ${todayInPakistan()}` },
+      {
+        role: "user",
+        content: `FACTS:\n${JSON.stringify(factsForModel, null, 1)}\n\n${context}`,
+      },
+    ],
+    retrieval,
+  );
+  return { ...answer, facts };
+}
+
 export const analyzeSituation = createServerFn({ method: "POST" })
   .inputValidator((data: unknown): { narrative: string } =>
     validate(
@@ -578,31 +611,7 @@ export const analyzeSituation = createServerFn({ method: "POST" })
       data,
     ),
   )
-  .handler(async (ctx): Promise<SituationAnalysis> => {
-    const { narrative } = ctx.data;
-    const facts = await extractFacts(narrative);
-
-    const retrieval = await retrieveLegalSources(
-      facts.searchPhrases.length ? facts.searchPhrases : [facts.summary],
-      { referenceText: narrative, maxSources: 5, maxContextChars: 5000 },
-    );
-    const context = buildContextBlock(retrieval);
-    logRetrieval("situation", retrieval, context.length);
-
-    // The facts (not the raw narrative) go to the model, which keeps the request small.
-    const { searchPhrases: _phrases, ...factsForModel } = facts;
-    const answer = await groundedComplete(
-      [
-        { role: "system", content: `${SITUATION_PROMPT}\n\nToday's date: ${todayInPakistan()}` },
-        {
-          role: "user",
-          content: `FACTS:\n${JSON.stringify(factsForModel, null, 1)}\n\n${context}`,
-        },
-      ],
-      retrieval,
-    );
-    return { ...answer, facts };
-  });
+  .handler(async (ctx): Promise<SituationAnalysis> => analyzeIncident(ctx.data.narrative));
 
 // ── Speech to text ───────────────────────────────────────────────────────────
 // The browser records audio; Whisper (on Groq) transcribes it. The transcript is shown to the

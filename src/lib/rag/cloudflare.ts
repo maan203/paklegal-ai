@@ -34,9 +34,18 @@ export async function embed(ai: WorkersAI, texts: string[]): Promise<number[][]>
   return data;
 }
 
+type RagBindings = { ai: WorkersAI; index: VectorIndex };
+let provided: RagBindings | null = null;
+
+// Lets scripts (e.g. the evaluation) supply bindings from wrangler's getPlatformProxy.
+export function provideRagBindings(bindings: RagBindings) {
+  provided = bindings;
+}
+
 // Returns null when the bindings are unavailable (e.g. `vite dev` without the Cloudflare
 // runtime), so callers can fall back instead of crashing.
-export async function getRagBindings(): Promise<{ ai: WorkersAI; index: VectorIndex } | null> {
+export async function getRagBindings(): Promise<RagBindings | null> {
+  if (provided) return provided;
   try {
     const { env } = (await import(/* @vite-ignore */ "cloudflare:workers")) as {
       env: { AI?: WorkersAI; VECTORIZE?: VectorIndex };

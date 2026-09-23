@@ -33,3 +33,6 @@ dist-ssr
 
 # RAG: official law PDFs are downloaded by `npm run rag:build`
 knowledge/raw/
+
+# Evaluation answer cache (npm run rag:eval-answers)
+knowledge/eval/.cache/

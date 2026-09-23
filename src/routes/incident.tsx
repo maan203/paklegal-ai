@@ -242,6 +242,12 @@ function Page() {
               )}
             </p>
           )}
+          <p className={`mt-4 text-xs text-muted-foreground ${ur}`}>
+            {t(
+              "Currently covers the Constitution of Pakistan, the Pakistan Penal Code, the Code of Criminal Procedure and the Prevention of Electronic Crimes Act. Family, tenancy, labour and consumer law are not included yet; when a question falls outside these laws, PakLegal AI says so instead of guessing.",
+              "فی الحال آئینِ پاکستان، تعزیراتِ پاکستان، ضابطہ فوجداری اور پیکا ایکٹ شامل ہیں۔ خاندانی، کرایہ داری، مزدوری اور صارف کے قوانین ابھی شامل نہیں؛ جب سوال ان قوانین سے باہر ہو تو پاک لیگل اے آئی اندازہ لگانے کے بجائے یہ بتا دیتا ہے۔",
+            )}
+          </p>
         </div>
 
         <div className="mt-6">
