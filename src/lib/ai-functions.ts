@@ -2,6 +2,14 @@ import { createServerFn } from "@tanstack/react-start";
 import OpenAI from "openai";
 import { extractText, getDocumentProxy } from "unpdf";
 import { z } from "zod";
+import { removeEmDashes } from "@/lib/utils";
+import {
+  buildContextBlock,
+  findUnsupportedCitations,
+  LEGAL_CONTEXT_RULES,
+  normalizeCitationMarks,
+} from "@/lib/rag/context";
+import { retrieveLegalSources, type LegalSource, type RetrievalStatus } from "@/lib/rag/retrieve";
 
 // Groq free tier (OpenAI-compatible API). Override with GROQ_MODEL / GROQ_VISION_MODEL if needed.
 const DEFAULT_MODEL = "openai/gpt-oss-120b";
@@ -13,8 +21,9 @@ const MAX_DOCUMENT_CHARS = 12000;
 const MAX_IMAGE_BASE64_CHARS = 4 * 1024 * 1024;
 // The UI allows 10 MB files; base64 adds ~33%.
 const MAX_FILE_BASE64_CHARS = 14 * 1024 * 1024;
-// Older chat turns are dropped beyond this so long conversations stay under the rate limit.
-const MAX_CHAT_HISTORY_CHARS = 12000;
+// Older chat turns are dropped beyond this so long conversations, plus up to ~7,000 characters
+// of retrieved law, stay under the rate limit.
+const MAX_CHAT_HISTORY_CHARS = 8000;
 
 // ── Input validation ─────────────────────────────────────────────────────────
 
@@ -76,7 +85,7 @@ async function complete(
   const ai = getAI();
   try {
     const completion = await ai.chat.completions.create({ model, messages, max_tokens: maxTokens });
-    return { text: completion.choices[0]?.message?.content ?? "" };
+    return { text: removeEmDashes(completion.choices[0]?.message?.content ?? "") };
   } catch (err) {
     console.error("Groq API error:", err);
     if (err instanceof OpenAI.APIError) {
@@ -113,7 +122,7 @@ async function complete(
 // Legal documents must not contain made-up facts, figures or citations.
 const FACTS_RULE = `Accuracy rules:
 - Use ONLY the facts the user provided. Do not add events, dates, amounts, fees, deadlines or documents that were not given.
-- Never invent names, addresses, phone numbers, CNICs, case numbers or reference numbers — write a clear [placeholder] instead.
+- Never invent names, addresses, phone numbers, CNICs, case numbers or reference numbers. Write a clear [placeholder] instead.
 - Cite only Pakistani laws and sections you are certain exist. If unsure of an exact section number, name the law without a section.`;
 
 const FIR_SYSTEM_PROMPT = `You are a senior Pakistani criminal lawyer with expertise in the Code of Criminal Procedure (CrPC) 1898 and Pakistan Penal Code (PPC) 1860.
@@ -164,7 +173,7 @@ ${FACTS_RULE}
 
 Be precise about PPC sections. Common sections: theft (379-382), robbery (392-395), cheating/fraud (420), murder (302), grievous hurt (337), extortion (383-387), criminal breach of trust (405-409), kidnapping (365-369), sexual assault (376), trespass (441-447), cybercrime (PECA 2016). Match sections to what occurred.`;
 
-const TRANSLATOR_SYSTEM_PROMPT = `You are a Pakistani legal expert helping ordinary citizens understand complex legal documents. Be empathetic and clear — write as if explaining to someone with no legal background.
+const TRANSLATOR_SYSTEM_PROMPT = `You are a Pakistani legal expert helping ordinary citizens understand complex legal documents. Be empathetic and clear. Write as if explaining to someone with no legal background.
 
 Analyze the provided document and output EXACTLY this structure:
 
@@ -177,7 +186,7 @@ Analyze the provided document and output EXACTLY this structure:
 
 ---
 ## KEY DATES & DEADLINES
-[Bullet list: • DATE — what must happen by this date]
+[Bullet list: • DATE: what must happen by this date]
 
 ## اہم تاریخیں اور مہلتیں
 [Same in Urdu]
@@ -198,7 +207,7 @@ Analyze the provided document and output EXACTLY this structure:
 
 ---
 ## LEGAL TERMS EXPLAINED
-[For each key legal term: Term — plain English definition]
+[For each key legal term: Term: plain English definition]
 
 ## قانونی اصطلاحات
 [Same in Urdu]
@@ -210,7 +219,7 @@ Generate a professionally formatted legal notice following Pakistani legal conve
 - Have a proper LEGAL NOTICE header with date
 - Name the sending and receiving parties clearly
 - Present background facts chronologically
-- Cite only Pakistani law (never Indian statutes) — e.g. Contract Act 1872, Rent Restriction Ordinances, EOBI Act, PPC 1860, CrPC 1898, Sale of Goods Act, Consumer Protection Act, etc.
+- Cite only Pakistani law (never Indian statutes), e.g. Contract Act 1872, Rent Restriction Ordinances, EOBI Act, PPC 1860, CrPC 1898, Sale of Goods Act, Consumer Protection Act, etc.
 - State a specific demand with a clear deadline (14 days urgent, 30 days standard)
 - State consequences of non-compliance
 - End with a professional advocate signature block
@@ -429,17 +438,26 @@ export const generateLegalNotice = createServerFn({ method: "POST" })
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
-const CHAT_SYSTEM_PROMPT = `You are PakLegal AI — a knowledgeable Pakistani legal assistant. You help ordinary Pakistani citizens understand the law in plain language.
+export type ChatAnswer = {
+  text: string;
+  // Provisions retrieved from the knowledge base and given to the model for this answer.
+  sources: LegalSource[];
+  retrieval: RetrievalStatus;
+  // Provisions the answer mentions that were not among the retrieved sources.
+  unsupportedCitations: string[];
+};
+
+const CHAT_SYSTEM_PROMPT = `You are PakLegal AI, a knowledgeable Pakistani legal assistant. You help ordinary Pakistani citizens understand the law in plain language.
 
 Rules:
 - Answer questions about Pakistani law: Constitution, PPC, CrPC, civil law, family law, property law, labour law, consumer protection, cyber crime, etc.
 - Be clear, empathetic, and practical. Avoid excessive legal jargon.
 - Always remind users to consult a qualified lawyer for their specific situation.
-- Provide both English and Urdu explanations when the user writes in Urdu or asks for Urdu.
-- Cite the relevant law/section when applicable (e.g. "Section 302 PPC", "Article 10 Constitution").
-- Cite ONLY Pakistani law. Never cite Indian statutes or section numbers (e.g. the Indian Penal Code, BNS, or Section 138 of India's Negotiable Instruments Act). In Pakistan a dishonoured (bounced) cheque is an offence under Section 489-F PPC.
+- Cite ONLY Pakistani law. Never cite Indian statutes or section numbers (e.g. the Indian Penal Code, BNS, or Section 138 of India's Negotiable Instruments Act).
 - If a question is outside Pakistani law, politely say so.
-- Keep answers concise but complete — use bullet points for steps or lists.`;
+- Keep answers concise but complete. Use bullet points for steps or lists.
+
+${LEGAL_CONTEXT_RULES}`;
 
 const chatSchema = z.object({
   messages: z
@@ -475,13 +493,43 @@ function recentHistory(messages: ChatMessage[]): ChatMessage[] {
   return kept;
 }
 
+// What to search the knowledge base for: the latest question, plus the previous one for
+// short follow-ups ("what is the punishment?") that only make sense in context.
+function retrievalQuery(messages: ChatMessage[]): string {
+  const questions = messages.filter((m) => m.role === "user").map((m) => m.content);
+  const latest = questions[questions.length - 1];
+  const previous = questions[questions.length - 2];
+  return latest.length < 80 && previous ? `${previous}\n${latest}` : latest;
+}
+
 export const askLegalQuestion = createServerFn({ method: "POST" })
   .inputValidator((data: unknown): { messages: ChatMessage[] } => validate(chatSchema, data))
-  .handler(async (ctx) => {
-    return complete([
+  .handler(async (ctx): Promise<ChatAnswer> => {
+    const retrieval = await retrieveLegalSources(retrievalQuery(ctx.data.messages));
+
+    // The retrieved law goes with the latest question only; earlier turns stay as they were.
+    const history = recentHistory(ctx.data.messages);
+    const question = history[history.length - 1];
+    const context = buildContextBlock(retrieval);
+    console.log(
+      `RAG ${retrieval.status}: ${retrieval.sources.map((s) => s.id).join(", ") || "no sources"} (${context.length} chars of context sent to model)`,
+    );
+    const answer = await complete([
       { role: "system", content: `${CHAT_SYSTEM_PROMPT}\n\nToday's date: ${todayInPakistan()}` },
-      ...recentHistory(ctx.data.messages),
+      ...history.slice(0, -1),
+      {
+        role: "user",
+        content: `${context}\n\nQUESTION:\n${question.content}`,
+      },
     ]);
+    const text = normalizeCitationMarks(answer.text);
+
+    return {
+      text,
+      sources: retrieval.sources,
+      retrieval: retrieval.status,
+      unsupportedCitations: findUnsupportedCitations(text, retrieval.sources),
+    };
   });
 
 // ── Bail Application ─────────────────────────────────────────────────────────
@@ -497,7 +545,7 @@ The application must include:
 - Prayer / relief sought
 - Advocate signature block
 
-Output in the requested language only. Use formal legal language. Cite only Pakistani law — never Indian statutes.
+Output in the requested language only. Use formal legal language. Cite only Pakistani law, never Indian statutes.
 
 ${FACTS_RULE}`;
 
@@ -566,10 +614,10 @@ Identify the correct authority based on the complaint type:
 - Banking/Finance: SBP Banking Mohtasib or SECP
 - Insurance: SECP Insurance Division
 - General Consumer: Provincial Consumer Protection Courts
-- Online Fraud/Cybercrime: FIA Cybercrime Wing (now NCCIA — National Cyber Crime Investigation Agency)
+- Online Fraud/Cybercrime: FIA Cybercrime Wing (now NCCIA, the National Cyber Crime Investigation Agency)
 - Government Departments (NADRA, passport, etc.): Wafaqi Mohtasib (Federal Ombudsman), the relevant Provincial Ombudsman, or the Pakistan Citizen's Portal
 
-Output in the requested language only. Cite only Pakistani law — never Indian statutes.
+Output in the requested language only. Cite only Pakistani law, never Indian statutes.
 
 ${FACTS_RULE}`;
 

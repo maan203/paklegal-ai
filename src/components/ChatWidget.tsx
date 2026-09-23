@@ -2,13 +2,17 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { MessageCircle, X, Send, Loader2, Bot, User, RotateCcw } from "lucide-react";
 import { useLang } from "@/lib/i18n";
-import { askLegalQuestion, type ChatMessage } from "@/lib/ai-functions";
+import { askLegalQuestion, type ChatAnswer, type ChatMessage } from "@/lib/ai-functions";
 import { MarkdownResult } from "@/components/MarkdownResult";
+import { LegalSources } from "@/components/LegalSources";
+
+// Assistant messages also keep the legal sources their answer was based on.
+type UiMessage = ChatMessage & { answer?: Omit<ChatAnswer, "text"> };
 import { toast } from "sonner";
 
 const SUGGESTIONS = [
   { en: "What are my rights if I'm arrested?", ur: "گرفتاری پر میرے کیا حقوق ہیں؟" },
-  { en: "My landlord wants to evict me illegally — what can I do?", ur: "مالک مکان مجھے غیر قانونی طور پر بے دخل کر رہا ہے — کیا کروں؟" },
+  { en: "My landlord wants to evict me illegally. What can I do?", ur: "مالک مکان مجھے غیر قانونی طور پر بے دخل کر رہا ہے، کیا کروں؟" },
   { en: "How do I file a complaint against my employer for unpaid salary?", ur: "تنخواہ نہ ملنے پر آجر کے خلاف شکایت کیسے کروں؟" },
   { en: "What is Section 420 PPC?", ur: "دفعہ ٤٢٠ تعزیرات پاکستان کیا ہے؟" },
 ];
@@ -17,7 +21,7 @@ export function ChatWidget() {
   const { t, lang } = useLang();
   const pathname = useLocation({ select: (l) => l.pathname });
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -28,14 +32,16 @@ export function ChatWidget() {
 
   const send = useCallback(async (text: string) => {
     if (!text.trim() || isLoading) return;
-    const userMsg: ChatMessage = { role: "user", content: text.trim() };
+    const userMsg: UiMessage = { role: "user", content: text.trim() };
     const updated = [...messages, userMsg];
     setMessages(updated);
     setInput("");
     setIsLoading(true);
     try {
-      const res = await askLegalQuestion({ data: { messages: updated } });
-      setMessages([...updated, { role: "assistant", content: res.text }]);
+      // Only the conversation text goes to the server, not the sources shown in the UI.
+      const history = updated.map(({ role, content }) => ({ role, content }));
+      const { text: answerText, ...answer } = await askLegalQuestion({ data: { messages: history } });
+      setMessages([...updated, { role: "assistant", content: answerText, answer }]);
     } catch (err) {
       // Drop the unanswered question and give it back so the user can retry.
       setMessages(messages);
@@ -111,7 +117,10 @@ export function ChatWidget() {
                 </div>
                 <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.role === "user" ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-card border border-border rounded-tl-sm"}`}>
                   {m.role === "assistant"
-                    ? <MarkdownResult text={m.content} />
+                    ? <>
+                      <MarkdownResult text={m.content} />
+                      {m.answer && <LegalSources {...m.answer} />}
+                    </>
                     : <p className="leading-relaxed">{m.content}</p>
                   }
                 </div>
@@ -154,7 +163,7 @@ export function ChatWidget() {
               </button>
             </div>
             <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-              {t("AI guidance only — consult a lawyer for your case", "صرف عمومی رہنمائی — اپنے مقدمے کے لیے وکیل سے رابطہ کریں")}
+              {t("AI guidance only. Consult a lawyer for your case.", "صرف عمومی رہنمائی۔ اپنے مقدمے کے لیے وکیل سے رابطہ کریں")}
             </p>
           </div>
         </div>

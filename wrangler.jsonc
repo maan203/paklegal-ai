@@ -4,4 +4,8 @@
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  // Legal knowledge base (RAG): Workers AI embeds text, Vectorize stores the law chunks.
+  // "remote": true lets local dev and the ingest script use the real Cloudflare services.
+  "ai": { "binding": "AI", "remote": true },
+  "vectorize": [{ "binding": "VECTORIZE", "index_name": "paklegal-laws", "remote": true }],
 }

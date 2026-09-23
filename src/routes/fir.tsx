@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/fir")({
   component: Page,
-  head: () => ({ meta: [{ title: "FIR Drafting Assistant — PakLegal AI" }] }),
+  head: () => ({ meta: [{ title: "FIR Drafting Assistant | PakLegal AI" }] }),
 });
 
 type Step = "describe" | "details" | "language";

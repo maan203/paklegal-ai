@@ -20,7 +20,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/notice")({
   component: Page,
-  head: () => ({ meta: [{ title: "Legal Notice Generator — PakLegal AI" }] }),
+  head: () => ({ meta: [{ title: "Legal Notice Generator | PakLegal AI" }] }),
 });
 
 const TYPES = [
@@ -182,7 +182,7 @@ function Page() {
 
         titleEn="Legal Notice Generator"
         titleUr="قانونی نوٹس تیار کریں"
-        descEn="Choose your situation. We generate a properly formatted legal notice with the right legal basis, demand, and remedy — print-ready."
+        descEn="Choose your situation. We generate a properly formatted legal notice with the right legal basis, demand, and remedy, ready to print."
         descUr="اپنی صورتحال منتخب کریں۔ ہم درست قانونی بنیاد، مطالبہ اور حل کے ساتھ باقاعدہ نوٹس تیار کریں گے۔"
       />
 

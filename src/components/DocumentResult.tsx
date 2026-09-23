@@ -45,7 +45,7 @@ export function DocumentResult({
   }, [text, t]);
 
   const handlePrint = useCallback(() => {
-    if (!printDocument(`${printTitle} — PakLegal AI`, contentRef.current)) {
+    if (!printDocument(`${printTitle} | PakLegal AI`, contentRef.current)) {
       toast.error(
         t(
           "Please allow pop-ups for this site to print.",

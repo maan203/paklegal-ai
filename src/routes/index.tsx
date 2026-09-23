@@ -37,7 +37,7 @@ function Index() {
     },
     {
       to: "/rights", icon: ShieldCheck,
-      en: { title: "Know Your Rights", desc: "Your rights under the Constitution of Pakistan 1973 — searchable, in plain language." },
+      en: { title: "Know Your Rights", desc: "Your rights under the Constitution of Pakistan 1973, searchable, in plain language." },
       ur: { title: "اپنے حقوق جانیں", desc: "آئین پاکستان ١٩٧٣ کے تحت آپ کے حقوق، آسان زبان میں۔" },
     },
   ];
@@ -53,12 +53,12 @@ function Index() {
               {t("AI-powered • Free • Urdu + English", "اے آئی • مفت • اردو اور انگریزی")}
             </div>
             <h1 className={`mt-5 font-display text-4xl sm:text-5xl lg:text-6xl font-semibold leading-[1.05] tracking-tight ${lang === "ur" ? "urdu" : ""}`}>
-              {t("The law belongs to everyone — not just those who can afford it.", "قانون سب کا حق ہے، صرف امیروں کا نہیں۔")}
+              {t("The law belongs to everyone, not just those who can afford it.", "قانون سب کا حق ہے، صرف امیروں کا نہیں۔")}
             </h1>
             <p className={`mt-6 max-w-xl text-lg text-muted-foreground ${lang === "ur" ? "urdu" : ""}`}>
               {t(
-                "PakLegal AI helps Pakistani citizens understand court documents, file FIRs, and exercise their constitutional rights — for free, in their own language.",
-                "پاک لیگل اے آئی پاکستانی شہریوں کو عدالتی دستاویزات سمجھنے، ایف آئی آر درج کرنے، اور آئینی حقوق استعمال کرنے میں مدد دیتا ہے — مفت، آپ کی اپنی زبان میں۔"
+                "PakLegal AI helps Pakistani citizens understand court documents, file FIRs, and exercise their constitutional rights, for free, in their own language.",
+                "پاک لیگل اے آئی پاکستانی شہریوں کو عدالتی دستاویزات سمجھنے، ایف آئی آر درج کرنے، اور آئینی حقوق استعمال کرنے میں مدد دیتا ہے، مفت، آپ کی اپنی زبان میں۔"
               )}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">

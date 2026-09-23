@@ -5,7 +5,6 @@ import { useLang } from "@/lib/i18n";
 
 const NAV = [
   { to: "/", en: "Home", ur: "ہوم" },
-  { to: "/chat", en: "Legal Chat", ur: "قانونی چیٹ" },
   { to: "/translator", en: "Translator", ur: "ترجمہ" },
   { to: "/fir", en: "Draft FIR", ur: "ایف آئی آر" },
   { to: "/bail", en: "Bail App.", ur: "ضمانت" },

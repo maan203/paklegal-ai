@@ -12,7 +12,10 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     plugins: [
-      ...(command === "build" ? [cloudflare({ viteEnvironment: { name: "ssr" } })] : []),
+      // Runs server code in Cloudflare's runtime so the AI + VECTORIZE bindings (legal knowledge
+      // base) work in dev too. They connect to your Cloudflare account, so `npx wrangler login`
+      // is needed; set RAG_OFFLINE=1 to run without them (chat then answers without sources).
+      cloudflare({ viteEnvironment: { name: "ssr" }, remoteBindings: env.RAG_OFFLINE !== "1" }),
       tailwindcss(),
       tsconfigPaths({ projects: ["./tsconfig.json"] }),
       tanstackStart({ server: { entry: "server" } }),

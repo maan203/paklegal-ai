@@ -1,6 +1,4 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+// The site's style avoids em dashes; AI models use them heavily.
+export function removeEmDashes(text: string): string {
+  return text.replace(/\s*\u2014\s*/g, " - ");
 }

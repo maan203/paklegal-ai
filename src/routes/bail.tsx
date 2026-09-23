@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/bail")({
   component: Page,
-  head: () => ({ meta: [{ title: "Bail Application — PakLegal AI" }] }),
+  head: () => ({ meta: [{ title: "Bail Application | PakLegal AI" }] }),
 });
 
 type Step = "details" | "language";

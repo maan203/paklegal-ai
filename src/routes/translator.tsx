@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/translator")({
   component: Page,
-  head: () => ({ meta: [{ title: "Court Order Translator — PakLegal AI" }] }),
+  head: () => ({ meta: [{ title: "Court Order Translator | PakLegal AI" }] }),
 });
 
 type Tab = "upload" | "paste";

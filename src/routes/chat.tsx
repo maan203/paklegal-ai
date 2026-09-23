@@ -3,25 +3,29 @@ import { Send, Loader2, RotateCcw, Bot, User } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { useLang } from "@/lib/i18n";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { askLegalQuestion, type ChatMessage } from "@/lib/ai-functions";
+import { askLegalQuestion, type ChatAnswer, type ChatMessage } from "@/lib/ai-functions";
 import { MarkdownResult } from "@/components/MarkdownResult";
+import { LegalSources } from "@/components/LegalSources";
+
+// Assistant messages also keep the legal sources their answer was based on.
+type UiMessage = ChatMessage & { answer?: Omit<ChatAnswer, "text"> };
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/chat")({
   component: Page,
-  head: () => ({ meta: [{ title: "Legal Chat Assistant — PakLegal AI" }] }),
+  head: () => ({ meta: [{ title: "Legal Chat Assistant | PakLegal AI" }] }),
 });
 
 const SUGGESTIONS = [
   { en: "What are my rights if I'm arrested?", ur: "گرفتاری پر میرے کیا حقوق ہیں؟" },
-  { en: "My landlord wants to evict me illegally — what can I do?", ur: "مالک مکان مجھے غیر قانونی طور پر بے دخل کر رہا ہے — کیا کروں؟" },
+  { en: "My landlord wants to evict me illegally. What can I do?", ur: "مالک مکان مجھے غیر قانونی طور پر بے دخل کر رہا ہے، کیا کروں؟" },
   { en: "How do I file a complaint against my employer for unpaid salary?", ur: "تنخواہ نہ ملنے پر آجر کے خلاف شکایت کیسے کروں؟" },
   { en: "What is Section 420 PPC?", ur: "دفعہ ٤٢٠ تعزیرات پاکستان کیا ہے؟" },
 ];
 
 function Page() {
   const { t, lang } = useLang();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -32,14 +36,16 @@ function Page() {
 
   const send = useCallback(async (text: string) => {
     if (!text.trim() || isLoading) return;
-    const userMsg: ChatMessage = { role: "user", content: text.trim() };
+    const userMsg: UiMessage = { role: "user", content: text.trim() };
     const updated = [...messages, userMsg];
     setMessages(updated);
     setInput("");
     setIsLoading(true);
     try {
-      const res = await askLegalQuestion({ data: { messages: updated } });
-      setMessages([...updated, { role: "assistant", content: res.text }]);
+      // Only the conversation text goes to the server, not the sources shown in the UI.
+      const history = updated.map(({ role, content }) => ({ role, content }));
+      const { text: answerText, ...answer } = await askLegalQuestion({ data: { messages: history } });
+      setMessages([...updated, { role: "assistant", content: answerText, answer }]);
     } catch (err) {
       // Drop the unanswered question and give it back so the user can retry.
       setMessages(messages);
@@ -67,7 +73,7 @@ function Page() {
             <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-1">{t("Feature 05", "خصوصیت ۰۵")}</p>
             <h1 className="font-display text-3xl sm:text-4xl font-bold">{t("Legal Chat Assistant", "قانونی چیٹ اسسٹنٹ")}</h1>
             <p className={`mt-2 text-muted-foreground max-w-xl ${lang === "ur" ? "urdu" : ""}`}>
-              {t("Ask any question about Pakistani law — in English or Urdu.", "پاکستانی قانون کے بارے میں انگریزی یا اردو میں کوئی بھی سوال پوچھیں۔")}
+              {t("Ask any question about Pakistani law, in English or Urdu.", "پاکستانی قانون کے بارے میں انگریزی یا اردو میں کوئی بھی سوال پوچھیں۔")}
             </p>
           </div>
           {messages.length > 0 && (
@@ -102,7 +108,10 @@ function Page() {
               </div>
               <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${m.role === "user" ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-card border border-border rounded-tl-sm"}`}>
                 {m.role === "assistant"
-                  ? <MarkdownResult text={m.content} />
+                  ? <>
+                      <MarkdownResult text={m.content} />
+                      {m.answer && <LegalSources {...m.answer} />}
+                    </>
                   : <p className="text-sm leading-relaxed">{m.content}</p>
                 }
               </div>

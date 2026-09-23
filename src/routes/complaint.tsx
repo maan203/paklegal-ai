@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/complaint")({
   component: Page,
-  head: () => ({ meta: [{ title: "Consumer Complaint — PakLegal AI" }] }),
+  head: () => ({ meta: [{ title: "Consumer Complaint | PakLegal AI" }] }),
 });
 
 type Step = "type" | "details" | "language";
@@ -84,7 +84,7 @@ function Page() {
   return (
     <PageShell>
       <PageHeader titleEn="Consumer Complaint" titleUr="صارف شکایت"
-        descEn="Generate a formal complaint to PTA, NEPRA, SBP, FIA Cybercrime, or consumer courts — with the right legal basis." descUr="پی ٹی اے، نیپرا، ایس بی پی، ایف آئی اے سائبر کرائم یا صارف عدالتوں میں باضابطہ شکایت تیار کریں۔" />
+        descEn="Generate a formal complaint to PTA, NEPRA, SBP, FIA Cybercrime, or consumer courts, with the right legal basis." descUr="پی ٹی اے، نیپرا، ایس بی پی، ایف آئی اے سائبر کرائم یا صارف عدالتوں میں باضابطہ شکایت تیار کریں۔" />
       <div className="mx-auto max-w-4xl px-4 sm:px-6 pb-16">
 
         {/* Step indicator */}

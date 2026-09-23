@@ -7,7 +7,7 @@ import { useState } from "react";
 
 export const Route = createFileRoute("/rights")({
   component: Page,
-  head: () => ({ meta: [{ title: "Know Your Rights — PakLegal AI" }] }),
+  head: () => ({ meta: [{ title: "Know Your Rights | PakLegal AI" }] }),
 });
 
 const RIGHTS = [
@@ -15,7 +15,7 @@ const RIGHTS = [
   { cat: "Arrest", catUr: "گرفتاری", en: "Right to know grounds of arrest", ur: "گرفتاری کی وجہ جاننے کا حق", refEn: "Article 10(1), Constitution of Pakistan", descEn: "No one shall be detained without being informed of the grounds for arrest as soon as possible.", descUr: "کسی شخص کو گرفتاری کی وجوہات جلد از جلد بتانا لازمی ہے۔" },
   { cat: "Arrest", catUr: "گرفتاری", en: "Right to consult a lawyer", ur: "وکیل سے ملاقات کا حق", refEn: "Article 10(1), Constitution of Pakistan", descEn: "Every arrested person has the right to consult and be defended by a legal practitioner of their choice.", descUr: "ہر گرفتار شخص کو اپنی پسند کے وکیل سے مشورہ اور دفاع کا حق حاصل ہے۔" },
   { cat: "Arrest", catUr: "گرفتاری", en: "Right to be produced before magistrate within 24 hours", ur: "۲۴ گھنٹے میں مجسٹریٹ کے سامنے پیشی", refEn: "Article 10(2), Constitution & Section 61 CrPC", descEn: "An arrested person must be produced before a magistrate within 24 hours. Detention beyond this without magistrate's order is illegal.", descUr: "گرفتار شخص کو ۲۴ گھنٹے میں مجسٹریٹ کے سامنے پیش کرنا لازمی ہے۔ اس کے بغیر حراست غیر قانونی ہے۔" },
-  { cat: "Arrest", catUr: "گرفتاری", en: "Right to bail in bailable offences", ur: "قابلِ ضمانت جرائم میں ضمانت کا حق", refEn: "Section 496 CrPC", descEn: "In bailable offences, a person is entitled to bail as a matter of right. Police cannot refuse bail in such cases.", descUr: "قابل ضمانت جرائم میں ضمانت حق ہے — پولیس انکار نہیں کر سکتی۔" },
+  { cat: "Arrest", catUr: "گرفتاری", en: "Right to bail in bailable offences", ur: "قابلِ ضمانت جرائم میں ضمانت کا حق", refEn: "Section 496 CrPC", descEn: "In bailable offences, a person is entitled to bail as a matter of right. Police cannot refuse bail in such cases.", descUr: "قابل ضمانت جرائم میں ضمانت حق ہے، پولیس انکار نہیں کر سکتی۔" },
   { cat: "Arrest", catUr: "گرفتاری", en: "Protection from torture and cruel treatment", ur: "تشدد سے تحفظ", refEn: "Article 14, Constitution of Pakistan", descEn: "Dignity of man is inviolable. Torture for the purpose of extracting evidence is prohibited by law.", descUr: "انسانی وقار ناقابل تنسیخ ہے۔ اعتراف لینے کے لیے تشدد قانوناً ممنوع ہے۔" },
   // Fair Trial
   { cat: "Fair Trial", catUr: "منصفانہ مقدمہ", en: "Right to fair trial and due process", ur: "منصفانہ مقدمہ کا حق", refEn: "Article 10A, Constitution of Pakistan", descEn: "For the determination of civil rights or any criminal charge, every person is entitled to a fair trial and due process.", descUr: "کسی بھی معاملے میں ہر شخص کو منصفانہ مقدمے کا حق حاصل ہے۔" },
@@ -41,7 +41,7 @@ const RIGHTS = [
   { cat: "Consumer", catUr: "صارف", en: "Right to file complaint with consumer court", ur: "صارف عدالت میں شکایت کا حق", refEn: "Punjab Consumer Protection Act 2005 (and provincial equivalents)", descEn: "Consumers can file complaints against sellers, manufacturers, or service providers in Consumer Protection Courts for compensation.", descUr: "صارف بیچنے والے یا خدمت فراہم کنندہ کے خلاف صارف عدالت میں معاوضے کے لیے شکایت کر سکتا ہے۔" },
   // Cybercrime
   { cat: "Cybercrime", catUr: "سائبر کرائم", en: "Right to report online fraud to FIA", ur: "آن لائن فراڈ کی رپورٹ کا حق", refEn: "Prevention of Electronic Crimes Act (PECA), 2016", descEn: "Victims of online fraud, harassment, or hacking can file a complaint with FIA Cybercrime Wing at cybercrime.gov.pk.", descUr: "آن لائن فراڈ یا ہراسانی کا شکار ہونے والا شخص ایف آئی اے سائبر کرائم ونگ میں شکایت درج کر سکتا ہے۔" },
-  { cat: "Cybercrime", catUr: "سائبر کرائم", en: "Protection from online defamation", ur: "آن لائن بدنامی سے تحفظ", refEn: "Section 20, PECA 2016", descEn: "Sharing false information online to harm someone's reputation is a criminal offence punishable with up to 3 years imprisonment.", descUr: "کسی کی بدنامی کے لیے جھوٹی معلومات آن لائن پھیلانا جرم ہے — ۳ سال قید تک سزا۔" },
+  { cat: "Cybercrime", catUr: "سائبر کرائم", en: "Protection from online defamation", ur: "آن لائن بدنامی سے تحفظ", refEn: "Section 20, PECA 2016", descEn: "Sharing false information online to harm someone's reputation is a criminal offence punishable with up to 3 years imprisonment.", descUr: "کسی کی بدنامی کے لیے جھوٹی معلومات آن لائن پھیلانا جرم ہے، ۳ سال قید تک سزا۔" },
 ];
 
 function Page() {
@@ -62,7 +62,7 @@ function Page() {
     <PageShell>
       <PageHeader
         titleEn="Know Your Rights" titleUr="اپنے حقوق جانیں"
-        descEn="Your fundamental rights as a Pakistani citizen — explained in plain language, with constitutional and statutory references."
+        descEn="Your fundamental rights as a Pakistani citizen, explained in plain language, with constitutional and statutory references."
         descUr="پاکستانی شہری کی حیثیت سے آپ کے بنیادی حقوق، آسان زبان میں، آئینی اور قانونی حوالوں کے ساتھ۔" />
 
       <div className="mx-auto max-w-5xl px-4 sm:px-6 pb-16">
