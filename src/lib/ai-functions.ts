@@ -1,17 +1,47 @@
 import { createServerFn } from "@tanstack/react-start";
 import OpenAI from "openai";
 
-const MODEL = "meta/llama-3.3-70b-instruct";
+// Groq free tier (OpenAI-compatible API). Override with GROQ_MODEL if needed.
+const DEFAULT_MODEL = "openai/gpt-oss-120b";
 
 function getAI() {
-  const apiKey = process.env.NVIDIA_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    throw new Error("NVIDIA_API_KEY is not configured. Add it to .env.local for local dev.");
+    throw new Error(
+      "GROQ_API_KEY is not configured. Add it to .env.local for local dev, or run `npx wrangler secret put GROQ_API_KEY` for production.",
+    );
   }
   return new OpenAI({
     apiKey,
-    baseURL: "https://integrate.api.nvidia.com/v1",
+    baseURL: "https://api.groq.com/openai/v1",
   });
+}
+
+type Message = { role: "system" | "user" | "assistant"; content: string };
+
+async function complete(messages: Message[]): Promise<{ text: string }> {
+  const ai = getAI();
+  const model = process.env.GROQ_MODEL || DEFAULT_MODEL;
+  try {
+    const completion = await ai.chat.completions.create({ model, messages });
+    return { text: completion.choices[0]?.message?.content ?? "" };
+  } catch (err) {
+    console.error("Groq API error:", err);
+    if (err instanceof OpenAI.APIError) {
+      if (err.status === 401 || err.status === 403) {
+        throw new Error("The AI service rejected the API key. Check GROQ_API_KEY.");
+      }
+      if (err.status === 404) {
+        throw new Error(
+          `AI model "${model}" is not available. Set GROQ_MODEL to a current model.`,
+        );
+      }
+      if (err.status === 429) {
+        throw new Error("The AI service is rate-limited. Please try again in a minute.");
+      }
+    }
+    throw new Error("The AI service is unavailable right now. Please try again.");
+  }
 }
 
 const FIR_SYSTEM_PROMPT = `You are a senior Pakistani criminal lawyer with expertise in the Code of Criminal Procedure (CrPC) 1898 and Pakistan Penal Code (PPC) 1860.
@@ -170,7 +200,6 @@ export const generateFIRDraft = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async (ctx) => {
-    const ai = getAI();
     const { description, language, name, cnic, address, phone, incidentDate, incidentTime, place, witness1, witness2 } = ctx.data;
 
     const langInstruction = language === "ur"
@@ -191,14 +220,10 @@ export const generateFIRDraft = createServerFn({ method: "POST" })
 
     const userPrompt = `${langInstruction}\n\nIncident Description:\n${description}${knownFields ? `\n\nAdditional Details Provided:\n${knownFields}` : ""}`;
 
-    const completion = await ai.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: "system", content: FIR_SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-    });
-    return { text: completion.choices[0]?.message?.content ?? "" };
+    return complete([
+      { role: "system", content: FIR_SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ]);
   });
 
 export const translateDocument = createServerFn({ method: "POST" })
@@ -210,7 +235,6 @@ export const translateDocument = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async (ctx) => {
-    const ai = getAI();
     const { text, fileBase64, mediaType, language = "both" } = ctx.data;
 
     const langInstruction =
@@ -229,14 +253,10 @@ export const translateDocument = createServerFn({ method: "POST" })
       userContent += `\n\n${text}`;
     }
 
-    const completion = await ai.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: "system", content: TRANSLATOR_SYSTEM_PROMPT },
-        { role: "user", content: userContent },
-      ],
-    });
-    return { text: completion.choices[0]?.message?.content ?? "" };
+    return complete([
+      { role: "system", content: TRANSLATOR_SYSTEM_PROMPT },
+      { role: "user", content: userContent },
+    ]);
   });
 
 export const generateLegalNotice = createServerFn({ method: "POST" })
@@ -246,15 +266,10 @@ export const generateLegalNotice = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async (ctx) => {
-    const ai = getAI();
-    const completion = await ai.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: "system", content: NOTICE_SYSTEM_PROMPT },
-        { role: "user", content: buildNoticePrompt(ctx.data) },
-      ],
-    });
-    return { text: completion.choices[0]?.message?.content ?? "" };
+    return complete([
+      { role: "system", content: NOTICE_SYSTEM_PROMPT },
+      { role: "user", content: buildNoticePrompt(ctx.data) },
+    ]);
   });
 
 // ── Legal Chat ──────────────────────────────────────────────────────────────
@@ -279,15 +294,7 @@ export const askLegalQuestion = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async (ctx) => {
-    const ai = getAI();
-    const completion = await ai.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: "system", content: CHAT_SYSTEM_PROMPT },
-        ...ctx.data.messages,
-      ],
-    });
-    return { text: completion.choices[0]?.message?.content ?? "" };
+    return complete([{ role: "system", content: CHAT_SYSTEM_PROMPT }, ...ctx.data.messages]);
   });
 
 // ── Bail Application ─────────────────────────────────────────────────────────
@@ -329,7 +336,6 @@ export const generateBailApplication = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async (ctx) => {
-    const ai = getAI();
     const { language, ...fields } = ctx.data;
     const langInstruction = language === "ur"
       ? "Generate the bail application in URDU ONLY."
@@ -338,14 +344,10 @@ export const generateBailApplication = createServerFn({ method: "POST" })
       .filter(([, v]) => v?.trim())
       .map(([k, v]) => `- ${k}: ${v}`)
       .join("\n");
-    const completion = await ai.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: "system", content: BAIL_SYSTEM_PROMPT },
-        { role: "user", content: `${langInstruction}\n\nDetails:\n${details}` },
-      ],
-    });
-    return { text: completion.choices[0]?.message?.content ?? "" };
+    return complete([
+      { role: "system", content: BAIL_SYSTEM_PROMPT },
+      { role: "user", content: `${langInstruction}\n\nDetails:\n${details}` },
+    ]);
   });
 
 // ── Consumer Complaint ───────────────────────────────────────────────────────
@@ -396,7 +398,6 @@ export const generateConsumerComplaint = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async (ctx) => {
-    const ai = getAI();
     const { language, ...fields } = ctx.data;
     const langInstruction = language === "ur"
       ? "Generate the complaint letter in URDU ONLY."
@@ -405,12 +406,8 @@ export const generateConsumerComplaint = createServerFn({ method: "POST" })
       .filter(([, v]) => v?.trim())
       .map(([k, v]) => `- ${k}: ${v}`)
       .join("\n");
-    const completion = await ai.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: "system", content: COMPLAINT_SYSTEM_PROMPT },
-        { role: "user", content: `${langInstruction}\n\nComplaint Details:\n${details}` },
-      ],
-    });
-    return { text: completion.choices[0]?.message?.content ?? "" };
+    return complete([
+      { role: "system", content: COMPLAINT_SYSTEM_PROMPT },
+      { role: "user", content: `${langInstruction}\n\nComplaint Details:\n${details}` },
+    ]);
   });

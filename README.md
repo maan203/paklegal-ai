@@ -24,7 +24,7 @@ PakLegal AI helps ordinary people understand court documents, draft FIRs, know t
 
 - **Framework:** [TanStack Start](https://tanstack.com/start) (React + SSR)
 - **Deployment:** Cloudflare Workers (edge)
-- **AI:** NVIDIA NIM API — `meta/llama-3.3-70b-instruct`
+- **AI:** [Groq](https://console.groq.com/) API — `openai/gpt-oss-120b` (override with `GROQ_MODEL`)
 - **Styling:** Tailwind CSS v4
 - **Language:** TypeScript
 - **i18n:** Custom Urdu/English context with RTL support
@@ -36,7 +36,7 @@ PakLegal AI helps ordinary people understand court documents, draft FIRs, know t
 ### Prerequisites
 
 - Node.js 18+
-- A [NVIDIA NIM API key](https://build.nvidia.com/)
+- A free [Groq API key](https://console.groq.com/keys)
 
 ### Installation
 
@@ -51,7 +51,9 @@ npm install
 Create a `.env.local` file in the root:
 
 ```env
-NVIDIA_API_KEY=your_nvidia_nim_api_key_here
+GROQ_API_KEY=your_groq_api_key_here
+# Optional: use a different Groq model
+# GROQ_MODEL=openai/gpt-oss-120b
 ```
 
 ### Run Locally
@@ -69,6 +71,14 @@ npm run build
 ```
 
 ### Deploy to Cloudflare Workers
+
+Set the API key as a Worker secret once (`.env.local` is not deployed):
+
+```bash
+npx wrangler secret put GROQ_API_KEY
+```
+
+Then deploy:
 
 ```bash
 npm run deploy
@@ -95,7 +105,7 @@ src/
 │   ├── PageShell.tsx
 │   └── MarkdownResult.tsx
 ├── lib/
-│   ├── ai-functions.ts   # Server functions — NVIDIA NIM API calls
+│   ├── ai-functions.ts   # Server functions — Groq API calls
 │   └── i18n.tsx          # Urdu/English language context
 └── hooks/
     └── useLocalStorage.ts

@@ -1,5 +1,7 @@
-# Copy this file to .dev.vars for local development
-# Get a free Gemini API key at: https://aistudio.google.com/apikey
-# .dev.vars is gitignored
+# Copy this file to .env.local (vite dev) or .dev.vars (wrangler) for local development
+# Get a free API key at: https://console.groq.com/keys
+# Both files are gitignored. For production: npx wrangler secret put GROQ_API_KEY
 
-GEMINI_API_KEY=your-gemini-api-key-here
+GROQ_API_KEY=your-groq-api-key-here
+# Optional: override the default model
+# GROQ_MODEL=openai/gpt-oss-120b
