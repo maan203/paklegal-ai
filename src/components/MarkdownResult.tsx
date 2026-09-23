@@ -1,6 +1,6 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { removeEmDashes } from "@/lib/utils";
+import { cleanAiText } from "@/lib/utils";
 
 // dir="auto" lets each block follow its own script, so Urdu lines read right-to-left
 // even when the rest of the page is in English (and vice versa).
@@ -41,7 +41,7 @@ export function MarkdownResult({ text }: { text: string }) {
     "
     >
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {removeEmDashes(text)}
+        {cleanAiText(text)}
       </ReactMarkdown>
     </div>
   );

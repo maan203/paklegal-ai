@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import OpenAI, { toFile } from "openai";
 import { extractText, getDocumentProxy } from "unpdf";
 import { z } from "zod";
-import { removeEmDashes } from "@/lib/utils";
+import { cleanAiText } from "@/lib/utils";
 import {
   buildContextBlock,
   CITATION_RULES,
@@ -107,7 +107,7 @@ async function complete(
         : undefined,
     });
     const content = completion.choices[0]?.message?.content ?? "";
-    return { text: jsonSchema ? content : removeEmDashes(content) };
+    return { text: jsonSchema ? content : cleanAiText(content) };
   } catch (err) {
     console.error("Groq API error:", err);
     if (err instanceof OpenAI.APIError) {
