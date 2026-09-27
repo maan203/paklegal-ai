@@ -35,6 +35,7 @@ import {
   type SituationFacts,
 } from "@/lib/ai-functions";
 import { buildComplaintDraft, buildLawyerBrief } from "@/lib/case-summary";
+import { citedSources } from "@/lib/rag/context";
 
 export const Route = createFileRoute("/incident")({
   component: Page,
@@ -310,9 +311,17 @@ function Result({
   const chat = useLegalChat(seed);
 
   const complaint = useMemo(() => buildComplaintDraft(facts, facts.language), [facts]);
+  // Only the provisions the explanation actually used; search results it set aside as not
+  // fitting the facts would mislead the lawyer.
   const brief = useMemo(
-    () => buildLawyerBrief(facts, analysis.sources, narrative, facts.language),
-    [facts, analysis.sources, narrative],
+    () =>
+      buildLawyerBrief(
+        facts,
+        citedSources(analysis.text, analysis.sources),
+        narrative,
+        facts.language,
+      ),
+    [facts, analysis.text, analysis.sources, narrative],
   );
 
   const buttonClass =
@@ -494,8 +503,8 @@ function Result({
               resetLabel={t("Close", "بند کریں")}
               onReset={() => setDocView(null)}
               disclaimer={t(
-                "The provisions listed are search results for your lawyer to confirm.",
-                "درج دفعات تلاش کے نتائج ہیں جن کی تصدیق آپ کا وکیل کرے گا۔",
+                "The provisions listed are the ones cited in the explanation, for your lawyer to confirm.",
+                "درج دفعات وہی ہیں جن کا حوالہ وضاحت میں دیا گیا، ان کی تصدیق آپ کا وکیل کرے گا۔",
               )}
             />
           </div>

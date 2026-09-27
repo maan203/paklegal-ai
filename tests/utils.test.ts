@@ -11,4 +11,9 @@ describe("cleanAiText", () => {
   it("replaces em dashes", () => {
     expect(cleanAiText("Section 380 \u2014 theft")).toBe("Section 380 - theft");
   });
+
+  it("replaces en dashes used as dashes but keeps number ranges", () => {
+    expect(cleanAiText("Documents \u2013 title deed")).toBe("Documents - title deed");
+    expect(cleanAiText("scores 0.53\u20130.77")).toBe("scores 0.53\u20130.77");
+  });
 });

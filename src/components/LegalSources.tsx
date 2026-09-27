@@ -1,14 +1,8 @@
 import { AlertTriangle, BookOpen, ExternalLink } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import type { GroundedAnswer } from "@/lib/ai-functions";
+import { isSourceCited as isCited } from "@/lib/rag/context";
 import type { LegalSource } from "@/lib/rag/retrieve";
-
-// A source counts as cited when the answer refers to it as [n] or names its number.
-function isCited(text: string, source: LegalSource, index: number): boolean {
-  if (text.includes(`[${index + 1}]`)) return true;
-  const number = source.displayNumber.replace(/[-]/g, "[-‐-―]?");
-  return new RegExp(`(?<![\\dA-Za-z])${number}(?![\\dA-Za-z])`).test(text);
-}
 
 function SourceItem({ source, index }: { source: LegalSource; index: number }) {
   const { t } = useLang();

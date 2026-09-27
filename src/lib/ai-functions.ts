@@ -350,7 +350,7 @@ export type ChatAnswer = GroundedAnswer;
 const CHAT_SYSTEM_PROMPT = `You are PakLegal AI, a knowledgeable Pakistani legal assistant. You help ordinary Pakistani citizens understand the law in plain language.
 
 Rules:
-- Answer questions about Pakistani law: Constitution, PPC, CrPC, civil law, family law, property law, labour law, consumer protection, cyber crime, etc.
+- Answer questions about Pakistani law. You can explain the Constitution, criminal law (PPC), criminal procedure (CrPC) and cyber crime (PECA) from the LEGAL CONTEXT. For family, property, tenancy, labour, consumer or other civil matters, say that these laws are not covered yet and give only brief general guidance.
 - Be clear, empathetic, and practical. Avoid excessive legal jargon.
 - Always remind users to consult a qualified lawyer for their specific situation.
 - Cite ONLY Pakistani law. Never cite Indian statutes or section numbers (e.g. the Indian Penal Code, BNS, or Section 138 of India's Negotiable Instruments Act).
@@ -512,8 +512,8 @@ Rules:
 - people: everyone involved, with their role (e.g. victim, accused, witness, landlord, employer, police).
 - losses: money, property or injuries mentioned. evidence: proof the person says they have.
 - missingInfo: up to 5 important facts a lawyer would need that are missing, as short questions to the person.
-- searchPhrases: 1 to 4 short ENGLISH phrases, one per legal issue, in plain words (e.g. "theft from a house at night", "police refusing to register a complaint"). No law names, no section numbers.
-- possibleCrime: true if the situation may involve a criminal offence.
+- searchPhrases: 1 to 4 short ENGLISH phrases, one per legal issue, in plain words. No law names, no section numbers. Split an incident into its separate acts: someone who climbed over the wall at night and stole a laptop gives "entering a house by climbing over the wall at night" and "theft of property from a house". If possibleCrime is true, add one phrase for the police step: "registering an FIR with the police", or "police refusing to register a complaint" if that happened.
+- possibleCrime: true only if the facts describe a criminal act (e.g. theft, violence, threats, fraud or cheating, harassment, cyber crime, unlawful arrest or detention). A dispute only about ownership, dividing property, inheritance, money owed without fraud, rent, a contract, a job or a family matter is civil: false.
 - urgent: true if someone is in danger or in custody, or a legal deadline is very close; urgentReason says why, otherwise "".`;
 
 const SITUATION_PROMPT = `You are PakLegal AI. A person in Pakistan has described their situation. You are given the FACTS extracted from their description and the LEGAL CONTEXT retrieved for it. Explain their legal position in plain, calm language.
@@ -522,7 +522,8 @@ ${CITATION_RULES}
 
 Write these sections as Markdown "##" headings:
 ## What the law says
-Which provisions in the LEGAL CONTEXT apply to these facts, and why, with citations. Say "may apply" where facts are unclear.
+Go through each legal issue in the facts separately (e.g. entering a house and stealing from it are two issues) and say which provisions in the LEGAL CONTEXT apply to it, and why, with citations. Say "may apply" where facts are unclear.
+If "possibleCrime" is false, or part of the problem is civil (dividing property, inheritance, family, tenancy, contracts, money owed, employment, consumer), start this section by saying plainly that the laws for that part are not in PakLegal AI's sources yet. Then give general next steps for it without section numbers. Do not present criminal-law or criminal-procedure provisions as the remedy for a civil dispute; mention one only if the facts describe a crime or a real threat of violence.
 ## Your rights
 The rights that matter in this situation.
 ## What you can do next
@@ -532,8 +533,15 @@ The evidence and documents to gather, and questions to ask.
 
 - Write everything in the language of the FACTS ("language"). For Urdu, use the headings "قانون کیا کہتا ہے", "آپ کے حقوق", "اب آپ کیا کر سکتے ہیں" and "وکیل سے ملنے سے پہلے", and keep provision numbers as written, e.g. "دفعہ 380، تعزیراتِ پاکستان".
 - If "urgent" is true, start with one short line on what to do immediately.
+- The person may be describing someone else's problem (a relative or friend). Refer to that person as the description does (e.g. "your cousin"); do not assume the writer is the victim or the owner.
 - Keep it under about 450 words. Do not repeat the facts back at length.
 - Never invent facts. This is legal information, not legal advice; end by suggesting a qualified lawyer.`;
+
+// The model sometimes writes the section headings as bold lines ("**قانون کیا کہتا ہے**")
+// instead of "##"; turn a line that is only bold text into a heading so it renders as one.
+function boldLinesToHeadings(text: string): string {
+  return text.replace(/^[ \t]*\*\*([^*\n]+?)\*\*:?[ \t]*$/gm, "## $1");
+}
 
 async function extractFacts(narrative: string): Promise<SituationFacts> {
   const { text } = await complete(
@@ -586,17 +594,23 @@ async function analyzeIncident(narrative: string): Promise<SituationAnalysis> {
 
   // The facts (not the raw narrative) go to the model, which keeps the request small.
   const { searchPhrases: _phrases, ...factsForModel } = facts;
+  // Search always returns the nearest provisions, even for a civil dispute that none of the
+  // loaded (criminal and constitutional) laws govern; the reminder stops the model from
+  // presenting them as the remedy.
+  const civilNote = facts.possibleCrime
+    ? ""
+    : "\n\nNOTE: possibleCrime is false. Start by saying that the laws for this matter are not in PakLegal AI's sources yet, and do not cite the provisions below unless the facts describe a crime or a real threat of violence.";
   const answer = await groundedComplete(
     [
       { role: "system", content: `${SITUATION_PROMPT}\n\nToday's date: ${todayInPakistan()}` },
       {
         role: "user",
-        content: `FACTS:\n${JSON.stringify(factsForModel, null, 1)}\n\n${context}`,
+        content: `FACTS:\n${JSON.stringify(factsForModel, null, 1)}${civilNote}\n\n${context}`,
       },
     ],
     retrieval,
   );
-  return { ...answer, facts };
+  return { ...answer, text: boldLinesToHeadings(answer.text), facts };
 }
 
 export const analyzeSituation = createServerFn({ method: "POST" })

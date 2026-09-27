@@ -146,6 +146,7 @@ npm run rag:ingest    # embed and upload knowledge/chunks/*.json
 npm run rag:eval      # optional: measure retrieval quality
 npm run rag:eval-answers  # optional: explanation quality with vs without RAG (uses ~150K Groq tokens)
 npm run speech:eval   # optional: Urdu speech-to-text accuracy
+npm run rag:try -- "<incident description>"  # optional: run one incident through the pipeline
 ```
 
 Run and check:
